@@ -1,0 +1,33 @@
+{
+  "manifest_version": 3,
+  "name": "AI Info Detector",
+  "version": "1.0",
+  "description": "Детектор информации",
+  
+  "icons": {
+    "32": "pictures/icon32.png", 
+    "48": "pictures/icon48.png",
+    "128": "pictures/icon128.png"
+  },
+  
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "AI Info Detector"
+  },
+  
+  "permissions": [
+    "storage",
+    "activeTab",
+    "scripting",
+    "contextMenus"
+  ],
+  
+  "host_permissions": [
+    "https://api.deepseek.com/*",
+    "https://*/*",
+    "http://*/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  }
+}
