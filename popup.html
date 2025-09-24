@@ -1,10 +1,10 @@
 <!DOCTYPE html>
 <html>
+
 <head>
     <meta charset="UTF-8">
     <title>VacLive</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <script src="https://unpkg.com/mammoth/mammoth.browser.min.js"></script>
     <style>
         * {
             margin: 0;
@@ -113,6 +113,55 @@
             display: flex;
             align-items: center;
             gap: 6px;
+            color: var(--text-secondary);
+        }
+
+        .progress-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.7);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 10000;
+        }
+
+        .progress-container {
+            background: var(--card);
+            padding: 30px;
+            border-radius: 16px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            min-width: 300px;
+            text-align: center;
+        }
+
+        .progress-text {
+            margin-bottom: 20px;
+            font-weight: 600;
+            color: var(--text-primary);
+            font-size: 16px;
+        }
+
+        .progress-bar {
+            background: var(--surface);
+            border-radius: 10px;
+            height: 12px;
+            overflow: hidden;
+            margin-bottom: 10px;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--primary), var(--primary-dark));
+            border-radius: 10px;
+            transition: width 0.3s ease;
+        }
+
+        .progress-percent {
+            font-size: 12px;
             color: var(--text-secondary);
         }
 
@@ -293,8 +342,15 @@
         }
 
         @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
 
         .user-message {
@@ -311,47 +367,6 @@
             border-bottom-left-radius: var(--radius-sm);
         }
 
-        .message-file {
-            background: var(--surface);
-            border: 1px solid var(--border);
-            border-radius: var(--radius-md);
-            padding: 12px;
-            margin: 4px 0;
-            max-width: 200px;
-        }
-
-        .file-preview {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            text-decoration: none;
-            color: var(--text-primary);
-        }
-
-        .file-icon {
-            width: 24px;
-            height: 24px;
-            flex-shrink: 0;
-        }
-
-        .file-info {
-            flex: 1;
-            min-width: 0;
-        }
-
-        .file-name {
-            font-weight: 500;
-            font-size: 12px;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-
-        .file-size {
-            font-size: 10px;
-            color: var(--text-secondary);
-        }
-
         .input-container {
             display: flex;
             gap: 8px;
@@ -359,31 +374,6 @@
             border-top: 1px solid var(--border);
             background: var(--surface);
             flex-shrink: 0;
-        }
-
-        .file-upload-container {
-            position: relative;
-        }
-
-        .file-upload-btn {
-            padding: 12px;
-            background: var(--surface);
-            border: 1px solid var(--border);
-            border-radius: var(--radius-md);
-            cursor: pointer;
-            transition: var(--transition);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .file-upload-btn:hover {
-            background: var(--card);
-            border-color: var(--primary);
-        }
-
-        .file-input {
-            display: none;
         }
 
         .chat-input {
@@ -413,45 +403,6 @@
         .send-btn:hover {
             background: var(--primary-dark);
             transform: scale(1.05);
-        }
-
-        .attachments-preview {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
-            padding: 8px 16px;
-            border-bottom: 1px solid var(--border);
-            background: var(--surface);
-        }
-
-        .attachment-item {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            background: var(--card);
-            border: 1px solid var(--border);
-            border-radius: var(--radius-sm);
-            padding: 4px 8px;
-            font-size: 12px;
-        }
-
-        .remove-attachment {
-            background: none;
-            border: none;
-            color: var(--error);
-            cursor: pointer;
-            padding: 2px;
-            border-radius: 50%;
-            width: 16px;
-            height: 16px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .remove-attachment:hover {
-            background: var(--error);
-            color: white;
         }
 
         /* Analyzer Specific */
@@ -494,8 +445,15 @@
         }
 
         @keyframes slideIn {
-            from { opacity: 0; transform: translateX(-10px); }
-            to { opacity: 1; transform: translateX(0); }
+            from {
+                opacity: 0;
+                transform: translateX(-10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
         }
 
         .verdict-header {
@@ -508,8 +466,8 @@
             border: 2px solid;
         }
 
-        #analysisResult > .analysis-item:first-child,
-        #analysisResult > .verdict-header:first-child {
+        #analysisResult>.analysis-item:first-child,
+        #analysisResult>.verdict-header:first-child {
             margin-top: 16px;
         }
 
@@ -597,7 +555,9 @@
         }
 
         @keyframes spin {
-            to { transform: rotate(360deg); }
+            to {
+                transform: rotate(360deg);
+            }
         }
 
         .error-message {
@@ -653,6 +613,7 @@
         }
     </style>
 </head>
+
 <body data-theme="light">
     <div class="container">
         <div class="header">
@@ -665,11 +626,16 @@
                     <img id="themeIcon" src="pictures/sun32.png" alt="Тема" class="icon">
                     <span id="themeText">Тема</span>
                 </button>
-                <button id="menuBtn" style="display:none; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 8px; cursor: pointer;">
-                    <span style="display: block;width: 20px;height: 20px;align-items: center;display: flex;align-content: center;justify-content: center;flex-wrap: wrap;">
-                        <span style="display:block; width:100%; height:2px; background:var(--text-secondary); border-radius:1px; margin:3px 0;"></span>
-                        <span style="display:block; width:100%; height:2px; background:var(--text-secondary); border-radius:1px; margin:3px 0;"></span>
-                        <span style="display:block; width:100%; height:2px; background:var(--text-secondary); border-radius:1px; margin:3px 0;"></span>
+                <button id="menuBtn"
+                    style="display:none; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 8px; cursor: pointer;">
+                    <span
+                        style="display: block;width: 20px;height: 20px;align-items: center;display: flex;align-content: center;justify-content: center;flex-wrap: wrap;">
+                        <span
+                            style="display:block; width:100%; height:2px; background:var(--text-secondary); border-radius:1px; margin:3px 0;"></span>
+                        <span
+                            style="display:block; width:100%; height:2px; background:var(--text-secondary); border-radius:1px; margin:3px 0;"></span>
+                        <span
+                            style="display:block; width:100%; height:2px; background:var(--text-secondary); border-radius:1px; margin:3px 0;"></span>
                     </span>
                 </button>
             </div>
@@ -707,9 +673,12 @@
             </div>
         </div>
 
-        <div id="menuPopup" style="display:none; position: absolute; top: 80px; right: 20px; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow); z-index: 100; min-width: 200px; overflow: hidden;">
-            <button id="changeKeyBtn" style="width:100%; background:none; border:none; padding:16px; text-align:left; cursor:pointer; font-size:14px; color:var(--text-primary); font-family: 'Inter', sans-serif; border-bottom: 1px solid var(--border);">
-                <img src="pictures/settings32.png" style="width:16px; height:16px; margin-right:8px; vertical-align:middle;">
+        <div id="menuPopup"
+            style="display:none; position: absolute; top: 80px; right: 20px; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow); z-index: 100; min-width: 200px; overflow: hidden;">
+            <button id="changeKeyBtn"
+                style="width:100%; background:none; border:none; padding:16px; text-align:left; cursor:pointer; font-size:14px; color:var(--text-primary); font-family: 'Inter', sans-serif; border-bottom: 1px solid var(--border);">
+                <img src="pictures/settings32.png"
+                    style="width:16px; height:16px; margin-right:8px; vertical-align:middle;">
                 Изменить API ключ
             </button>
         </div>
@@ -718,18 +687,9 @@
         <div id="chat-tab" class="tab-content active">
             <div class="content-container">
                 <div class="messages-container" id="messages">
-                    <div class="message bot-message">
-                        Привет! Я ваш AI помощник для проверки фактов. Чем могу помочь?
-                    </div>
+                    <!-- Сообщения будут загружаться из истории -->
                 </div>
-                <div class="attachments-preview" id="attachmentsPreview" style="display: none;"></div>
                 <div class="input-container">
-                    <div class="file-upload-container">
-                        <input type="file" id="fileInput" class="file-input" accept="image/*,.pdf,.txt,.doc,.docx,.jpg,.jpeg,.png,.gif" multiple>
-                        <button class="file-upload-btn" id="fileUploadBtn" type="button">
-                            <img src="pictures/attachment32.png" alt="Прикрепить файл" style="width:20px; height:20px;">
-                        </button>
-                    </div>
                     <input type="text" class="chat-input" id="userInput" placeholder="Введите сообщение...">
                     <button class="send-btn" id="sendBtn">
                         <img src="pictures/send32.png" alt="Отправить" style="width:20px; height:20px;">
@@ -741,9 +701,9 @@
         <!-- Вкладка анализатора -->
         <div id="analyzer-tab" class="tab-content">
             <div class="content-container">
-                <textarea class="analyze-textarea" id="analyzeText" 
-                          placeholder="Вставьте текст новости для анализа или используйте кнопки ниже..."></textarea>
-                
+                <textarea class="analyze-textarea" id="analyzeText"
+                    placeholder="Вставьте текст новости для анализа или используйте кнопки ниже..."></textarea>
+
                 <div class="analyze-buttons">
                     <button class="btn btn-primary" id="analyzePage">
                         <img src="pictures/eye32.png" alt="Анализ страницы" class="icon">
@@ -754,7 +714,7 @@
                         Анализ текста
                     </button>
                 </div>
-                
+
                 <div class="messages-container">
                     <div class="analysis-result" id="analysisResult">
                         <div class="message bot-message">
@@ -789,22 +749,23 @@
 
     <script src="popup.js"></script>
     <script>
-        document.addEventListener('DOMContentLoaded', function() {
+        document.addEventListener('DOMContentLoaded', function () {
             const themeToggle = document.getElementById('themeToggle');
             const themeIcon = document.getElementById('themeIcon');
             const themeText = document.getElementById('themeText');
-            
+
             function updateThemeIcon() {
                 const isDark = document.body.getAttribute('data-theme') === 'dark';
                 themeIcon.src = isDark ? 'pictures/moon32.png' : 'pictures/sun32.png';
                 themeText.textContent = isDark ? 'Тёмная' : 'Светлая';
             }
-            
+
             updateThemeIcon();
-            themeToggle.addEventListener('click', function() {
+            themeToggle.addEventListener('click', function () {
                 setTimeout(updateThemeIcon, 100);
             });
         });
     </script>
 </body>
+
 </html>

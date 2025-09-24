@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "VacLive",
-  "version": "1.4",
-  "description": "Info Relevance Checker with Background Analysis",
+  "version": "1.7",
+  "description": "Info Relevance Checker - Автономный анализ",
   
   "icons": {
     "32": "pictures/icon32.png",
@@ -24,7 +24,9 @@
   ],
   
   "host_permissions": [
-    "https://api.deepseek.com/*"
+    "https://api.deepseek.com/*",
+    "https://*/*",
+    "http://*/*"
   ],
   
   "background": {
@@ -32,11 +34,7 @@
   },
   
   "web_accessible_resources": [{
-    "resources": ["pictures/*"],
+    "resources": ["pictures/icon48.png"],
     "matches": ["<all_urls>"]
-  }],
-  
-  "content_security_policy": {
-    "extension_pages": "script-src 'self'; object-src 'self'"
-  }
+  }]
 }
