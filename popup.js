@@ -1,20 +1,34 @@
-// popup.js - полный исправленный код с работающей отменой анализа
-
 const CONFIG = {
     MAX_TEXT_LENGTH: 8000
 };
 
-// Глобальные переменные
 let currentTheme = 'light';
 let analysisHistory = [];
 let chatHistory = [];
 let currentAnalysisId = null;
 let currentAnalysisState = null;
 let currentMessageHandler = null;
+let analysisResultAlreadyShown = false;
 
-// Инициализация
+
 document.addEventListener('DOMContentLoaded', async function() {
     await initializeApp();
+    const themeToggle = document.getElementById('themeToggle');
+    const themeIcon = document.getElementById('themeIcon');
+    const themeText = document.getElementById('themeText');
+
+    function updateThemeIcon() {
+        const isDark = document.body.getAttribute('data-theme') === 'dark';
+        themeIcon.src = isDark ? 'pictures/moon32.png' : 'pictures/sun32.png';
+        themeText.textContent = isDark ? 'Тёмная' : 'Светлая';
+    }
+
+    updateThemeIcon();
+    if (themeToggle) {
+        themeToggle.addEventListener('click', function () {
+            setTimeout(updateThemeIcon, 100);
+        });
+    }
 });
 
 async function initializeApp() {
@@ -23,13 +37,28 @@ async function initializeApp() {
     setupTabs();
     await loadAnalysisHistory();
     await loadChatHistory();
-    
-    // Восстанавливаем состояние анализа после инициализации
+    await clearPendingUserMessage();
+    await showLastAnalysisResultIfAny();
     await restoreAnalysisState();
+
+async function clearPendingUserMessage() {
+    await chrome.storage.local.remove('pendingUserMessage');
+}
+}
+
+async function showLastAnalysisResultIfAny() {
+    const result = await chrome.storage.local.get(['lastAnalysisResult']);
+    if (result.lastAnalysisResult) {
+        const analyzerTab = document.querySelector('[data-tab="analyzer"]');
+        if (analyzerTab) analyzerTab.click();
+        displayAnalysisResult(result.lastAnalysisResult);
+        analysisResultAlreadyShown = true;
+        await chrome.storage.local.set({ lastAnalysisShownDate: Date.now() });
+        await chrome.storage.local.remove('lastAnalysisResult');
+    }
 }
 
 function setupEventListeners() {
-    // Меню
     document.getElementById('menuBtn').addEventListener('click', function(e) {
         e.stopPropagation();
         const popup = document.getElementById('menuPopup');
@@ -49,7 +78,6 @@ function setupEventListeners() {
         }
     });
     
-    // Основные кнопки
     document.getElementById('themeToggle').addEventListener('click', toggleTheme);
     document.getElementById('sendBtn').addEventListener('click', sendMessage);
     document.getElementById('userInput').addEventListener('keypress', e => {
@@ -65,41 +93,31 @@ function setupEventListeners() {
     document.getElementById('exportHistory').addEventListener('click', exportHistory);
 }
 
-// Восстановление состояния анализа при открытии расширения
 async function restoreAnalysisState() {
     try {
+        const { lastAnalysisShownDate } = await chrome.storage.local.get(['lastAnalysisShownDate']);
+        if (lastAnalysisShownDate && Date.now() - lastAnalysisShownDate < 60000) return;
+        if (analysisResultAlreadyShown) return;
         const result = await chrome.storage.local.get(['currentAnalysis', 'analysedText']);
-        
-        // Восстанавливаем выделенный текст если есть
         if (result.analysedText) {
             const textArea = document.getElementById('analyzeText');
             if (textArea) {
                 textArea.value = result.analysedText;
                 await chrome.storage.local.remove('analysedText');
+                const analyzerTab = document.querySelector('[data-tab="analyzer"]');
+                if (analyzerTab) analyzerTab.click();
             }
         }
-        
-        // Восстанавливаем состояние анализа
         if (result.currentAnalysis) {
             currentAnalysisState = result.currentAnalysis;
             currentAnalysisId = currentAnalysisState.analysisId;
-            
             if (currentAnalysisState.status === 'processing') {
-                // Показываем прогресс
                 showProgress(currentAnalysisState.message || 'Восстановление анализа...', currentAnalysisState.progress || 0);
-                
-                // Устанавливаем текст если есть
                 if (currentAnalysisState.text) {
                     document.getElementById('analyzeText').value = currentAnalysisState.text;
                 }
-                
-                // Переключаемся на вкладку анализатора
                 document.querySelector('[data-tab="analyzer"]').click();
-                
-                // Регистрируем обработчик для продолжения получения обновлений
                 setupMessageHandler();
-                
-                // Запрашиваем текущий статус у background script
                 checkAnalysisStatus();
             }
         }
@@ -108,9 +126,7 @@ async function restoreAnalysisState() {
     }
 }
 
-// Настройка обработчика сообщений
 function setupMessageHandler() {
-    // Удаляем предыдущий обработчик если он есть
     if (currentMessageHandler) {
         chrome.runtime.onMessage.removeListener(currentMessageHandler);
     }
@@ -118,7 +134,6 @@ function setupMessageHandler() {
     currentMessageHandler = (request, sender, sendResponse) => {
         console.log('Получено сообщение:', request);
         
-        // Проверяем что сообщение относится к текущему анализу
         if (request.analysisId !== currentAnalysisId) {
             return;
         }
@@ -141,7 +156,6 @@ function setupMessageHandler() {
     console.log('Обработчик сообщений установлен для анализа:', currentAnalysisId);
 }
 
-// Проверка статуса анализа
 function checkAnalysisStatus() {
     console.log('Проверка статуса анализа:', currentAnalysisId);
     
@@ -174,14 +188,12 @@ function checkAnalysisStatus() {
     });
 }
 
-// Попытка загрузить анализ из истории
 async function loadAnalysisFromHistory() {
     try {
         await loadAnalysisHistory();
         if (analysisHistory.length > 0) {
             const latestAnalysis = analysisHistory[0];
             if (latestAnalysis && Date.now() - new Date(latestAnalysis.timestamp).getTime() < 60000) {
-                // Берем последний анализ если он был сделан менее минуты назад
                 handleAnalysisComplete(latestAnalysis.result);
                 return;
             }
@@ -192,9 +204,7 @@ async function loadAnalysisFromHistory() {
     }
 }
 
-// Обработка завершения анализа
 function handleAnalysisComplete(result) {
-    // Проверяем не был ли анализ отменен
     if (!currentAnalysisId) {
         console.log('Анализ был отменен, игнорируем результат');
         return;
@@ -205,13 +215,10 @@ function handleAnalysisComplete(result) {
     showMessage('Анализ завершен!', 'success');
     clearAnalysisState();
     
-    // Обновляем историю
     refreshHistoryDisplay();
 }
 
-// Обработка ошибки анализа
 function handleAnalysisError(error) {
-    // Проверяем не была ли ошибка из-за отмены
     if (error.includes('отменен') || error.includes('AbortError')) {
         console.log('Анализ был отменен пользователем');
         return;
@@ -222,7 +229,6 @@ function handleAnalysisError(error) {
     clearAnalysisState();
 }
 
-// Сохранение состояния анализа
 async function saveAnalysisState(message, progress, status = 'processing') {
     const text = document.getElementById('analyzeText').value;
     currentAnalysisState = {
@@ -237,20 +243,17 @@ async function saveAnalysisState(message, progress, status = 'processing') {
     await chrome.storage.local.set({ currentAnalysis: currentAnalysisState });
 }
 
-// Очистка состояния анализа
 async function clearAnalysisState() {
     currentAnalysisState = null;
     currentAnalysisId = null;
     await chrome.storage.local.remove('currentAnalysis');
     
-    // Удаляем обработчик сообщений
     if (currentMessageHandler) {
         chrome.runtime.onMessage.removeListener(currentMessageHandler);
         currentMessageHandler = null;
     }
 }
 
-// Функция для обновления отображения истории
 async function refreshHistoryDisplay() {
     await loadAnalysisHistory();
     if (document.querySelector('[data-tab="history"]').classList.contains('active')) {
@@ -280,28 +283,22 @@ function setupTabs() {
         tab.addEventListener('click', () => {
             const tabName = tab.getAttribute('data-tab');
             
-            // Убираем активный класс у всех вкладок
             tabs.forEach(t => t.classList.remove('active'));
             tabContents.forEach(tc => tc.classList.remove('active'));
             
-            // Добавляем активный класс к выбранной вкладке
             tab.classList.add('active');
             document.getElementById(`${tabName}-tab`).classList.add('active');
             
-            // Анимируем перемещение индикатора
             moveIndicator();
             
-            // Загружаем историю если нужно
             if (tabName === 'history') {
                 refreshHistoryDisplay();
             }
         });
     });
 
-    // Обновляем индикатор при изменении размера окна
     window.addEventListener('resize', moveIndicator);
     
-    // Инициализируем позицию индикатора
     setTimeout(moveIndicator, 100);
 }
 
@@ -315,7 +312,6 @@ async function analyzeCurrentPage() {
     try {
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
         
-        // Показываем индикатор прогресса
         showProgress('Извлечение контента страницы...', 0);
         
         const results = await chrome.scripting.executeScript({
@@ -327,10 +323,8 @@ async function analyzeCurrentPage() {
             const pageContent = results[0].result;
             document.getElementById('analyzeText').value = pageContent;
             
-            // Обновляем прогресс
             showProgress('Подготовка к анализу...', 30);
             
-            // Используем фоновый анализ
             await performAnalysis(pageContent, `Анализ страницы: ${tab.title}`);
         }
     } catch (error) {
@@ -404,7 +398,6 @@ async function analyzeTextHandler() {
         return;
     }
     
-    // Показываем начальный прогресс
     showProgress('Подготовка к анализу...', 10);
     
     await performAnalysis(text, 'Анализ текста');
@@ -418,21 +411,16 @@ async function performAnalysis(text, title = 'Анализ') {
         analyzeBtn.innerHTML = '<span class="loading"></span> Анализируем...';
         analyzeBtn.disabled = true;
         
-        // Генерируем уникальный ID анализа
         currentAnalysisId = 'analysis_' + Date.now();
         
         console.log('Запуск анализа с ID:', currentAnalysisId);
         
-        // Сохраняем начальное состояние
         await saveAnalysisState('Запуск анализа...', 10);
         
-        // Настраиваем обработчик сообщений
         setupMessageHandler();
         
-        // Показываем прогресс сразу
         showProgress('Запуск анализа...', 10);
         
-        // Отправляем запрос на анализ
         chrome.runtime.sendMessage({
             action: "startAnalysis",
             text: text,
@@ -466,7 +454,6 @@ async function performAnalysis(text, title = 'Анализ') {
     }
 }
 
-// Функция для отображения индикатора прогресса
 function showProgress(message, progress) {
     let progressBar = document.getElementById('analysisProgress');
     
@@ -485,7 +472,6 @@ function showProgress(message, progress) {
             </div>
         `;
         
-        // Добавляем обработчик отмены
         progressBar.querySelector('#cancelAnalysis').addEventListener('click', cancelCurrentAnalysis);
         
         document.body.appendChild(progressBar);
@@ -500,7 +486,6 @@ function showProgress(message, progress) {
     }
 }
 
-// Функция для отмены текущего анализа
 async function cancelCurrentAnalysis() {
     if (!currentAnalysisId) return;
     
@@ -520,14 +505,12 @@ async function cancelCurrentAnalysis() {
         }
     } catch (error) {
         console.error('Ошибка при отмене анализа:', error);
-        // Все равно скрываем прогресс и очищаем состояние
         hideProgress();
         clearAnalysisState();
         showMessage('Анализ прерван', 'success');
     }
 }
 
-// Функция для скрытия индикатора прогресса
 function hideProgress() {
     const progressBar = document.getElementById('analysisProgress');
     if (progressBar) {
@@ -539,7 +522,6 @@ function displayAnalysisResult(result) {
     const resultDiv = document.getElementById('analysisResult');
     resultDiv.innerHTML = '';
     
-    // Вердикт с цветом
     const verdict = document.createElement('div');
     verdict.className = 'analysis-item';
     
@@ -563,7 +545,6 @@ function displayAnalysisResult(result) {
     `;
     resultDiv.appendChild(verdict);
     
-    // Валидация источников
     if (result.sources_validation) {
         const validationSection = document.createElement('div');
         validationSection.className = 'analysis-item';
@@ -579,7 +560,6 @@ function displayAnalysisResult(result) {
         resultDiv.appendChild(validationSection);
     }
     
-    // Проверенные факты с улучшенным отображением источников
     if (result.fact_check && result.fact_check.verified_facts && result.fact_check.verified_facts.length > 0) {
         const verifiedSection = document.createElement('div');
         verifiedSection.className = 'analysis-item';
@@ -589,7 +569,6 @@ function displayAnalysisResult(result) {
             const factDiv = document.createElement('div');
             factDiv.className = 'fact-item verified';
             
-            // Проверяем формат данных
             const factText = item.fact || item;
             const sourceText = item.source || 'Источник не указан';
             
@@ -602,7 +581,6 @@ function displayAnalysisResult(result) {
         resultDiv.appendChild(verifiedSection);
     }
     
-    // Ложные утверждения с улучшенным отображением источников
     if (result.fact_check && result.fact_check.false_claims && result.fact_check.false_claims.length > 0) {
         const falseSection = document.createElement('div');
         falseSection.className = 'analysis-item';
@@ -612,7 +590,6 @@ function displayAnalysisResult(result) {
             const claimDiv = document.createElement('div');
             claimDiv.className = 'fact-item false';
             
-            // Проверяем формат данных
             const claimText = item.claim || item;
             const sourceText = item.contradiction_source || 'Источник опровержения не указан';
             
@@ -625,7 +602,6 @@ function displayAnalysisResult(result) {
         resultDiv.appendChild(falseSection);
     }
     
-    // Неподтвержденные утверждения
     if (result.fact_check && result.fact_check.unverified_claims && result.fact_check.unverified_claims.length > 0) {
         const unverifiedSection = document.createElement('div');
         unverifiedSection.className = 'analysis-item';
@@ -635,7 +611,6 @@ function displayAnalysisResult(result) {
             const claimDiv = document.createElement('div');
             claimDiv.className = 'fact-item unverified';
             
-            // Проверяем формат данных
             const claimText = item.claim || item;
             const reasonText = item.reason || 'Причина непроверенности не указана';
             
@@ -648,7 +623,6 @@ function displayAnalysisResult(result) {
         resultDiv.appendChild(unverifiedSection);
     }
     
-    // Рекомендации
     if (result.recommendations && result.recommendations.length > 0) {
         const recSection = document.createElement('div');
         recSection.className = 'analysis-item';
@@ -663,7 +637,6 @@ function displayAnalysisResult(result) {
         resultDiv.appendChild(recSection);
     }
     
-    // Добавляем предупреждение если источники не указаны
     if (!hasProperSources(result)) {
         const warningSection = document.createElement('div');
         warningSection.className = 'analysis-item';
@@ -677,13 +650,11 @@ function displayAnalysisResult(result) {
     }
 }
 
-// Вспомогательная функция для проверки наличия источников
 function hasProperSources(result) {
     if (!result.fact_check) return false;
     
     let hasSources = false;
     
-    // Проверяем проверенные факты
     if (result.fact_check.verified_facts && result.fact_check.verified_facts.length > 0) {
         hasSources = result.fact_check.verified_facts.some(fact => {
             const source = fact.source || (typeof fact === 'string' ? null : fact.source);
@@ -748,16 +719,52 @@ function exportHistory() {
         return;
     }
     
-    const exportData = {
-        exportDate: new Date().toISOString(),
-        analyses: analysisHistory
-    };
-    
-    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+    let txt = `VacLive — История анализов\nЭкспорт: ${new Date().toLocaleString()}\n\n`;
+    analysisHistory.forEach((item, idx) => {
+        txt += `Анализ #${idx+1}\n`;
+        txt += `Дата: ${new Date(item.timestamp).toLocaleString()}\n`;
+        txt += `Заголовок: ${item.title || '-'}\n`;
+        txt += `Вердикт: ${item.result.verdict || '-'} (уверенность: ${item.result.confidence_level || '-'})\n`;
+        if (item.text) txt += `Текст: ${item.text}\n`;
+        if (item.result.fact_check) {
+            if (item.result.fact_check.verified_facts?.length) {
+                txt += `\n✔ Проверенные факты:\n`;
+                item.result.fact_check.verified_facts.forEach(f => {
+                    txt += `- ${f.fact}`;
+                    if (f.source) txt += ` (источник: ${f.source})`;
+                    txt += '\n';
+                });
+            }
+            if (item.result.fact_check.false_claims?.length) {
+                txt += `\n✖ Ложные утверждения:\n`;
+                item.result.fact_check.false_claims.forEach(f => {
+                    txt += `- ${f.claim}`;
+                    if (f.contradiction_source) txt += ` (обоснование: ${f.contradiction_source})`;
+                    txt += '\n';
+                });
+            }
+            if (item.result.fact_check.unverified_claims?.length) {
+                txt += `\n? Неподтверждённые утверждения:\n`;
+                item.result.fact_check.unverified_claims.forEach(f => {
+                    txt += `- ${f.claim}`;
+                    if (f.reason) txt += ` (причина: ${f.reason})`;
+                    txt += '\n';
+                });
+            }
+        }
+        if (item.result.recommendations?.length) {
+            txt += `\nРекомендации:\n`;
+            item.result.recommendations.forEach(r => {
+                txt += `- ${r}\n`;
+            });
+        }
+        txt += `\n${'-'.repeat(40)}\n\n`;
+    });
+    const blob = new Blob([txt], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `factcheck-history-${new Date().toISOString().split('T')[0]}.json`;
+    a.download = `VacLive-history-${new Date().toISOString().split('T')[0]}.txt`;
     a.click();
     URL.revokeObjectURL(url);
 }
@@ -771,44 +778,29 @@ async function loadChatHistory() {
 function markdownToHtml(md) {
     if (!md) return '';
     let html = md;
-    // code blocks
     html = html.replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>');
-    // inline code
     html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
-    // bold
     html = html.replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
     html = html.replace(/__([^_]+)__/g, '<b>$1</b>');
-    // italic
     html = html.replace(/\*([^*]+)\*/g, '<i>$1</i>');
     html = html.replace(/_([^_]+)_/g, '<i>$1</i>');
-    // strikethrough
     html = html.replace(/~~([^~]+)~~/g, '<del>$1</del>');
-    // underline (custom, not markdown standard)
     html = html.replace(/==([^=]+)==/g, '<u>$1</u>');
-    // superscript
     html = html.replace(/\^\(([^)]+)\)/g, '<sup>$1</sup>');
-    // subscript
     html = html.replace(/~\(([^)]+)\)/g, '<sub>$1</sub>');
-    // blockquote
     html = html.replace(/^>\s?(.*)$/gm, '<blockquote>$1</blockquote>');
-    // numbered lists
     html = html.replace(/^(\d+)\. (.*)$/gm, '<li>$2</li>');
     html = html.replace(/(<li>.*<\/li>)/gs, '<ol>$1</ol>');
-    // unordered lists
     html = html.replace(/^\s*[-*+] (.*)$/gm, '<li>$1</li>');
     html = html.replace(/(<li>.*<\/li>)/gs, '<ul>$1</ul>');
-    // links
     html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>');
-    // images
     html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img alt="$1" src="$2" style="max-width:100%;max-height:200px;">');
-    // headers
     html = html.replace(/^###### (.*)$/gm, '<h6>$1</h6>');
     html = html.replace(/^##### (.*)$/gm, '<h5>$1</h5>');
     html = html.replace(/^#### (.*)$/gm, '<h4>$1</h4>');
     html = html.replace(/^### (.*)$/gm, '<h3>$1</h3>');
     html = html.replace(/^## (.*)$/gm, '<h2>$1</h2>');
     html = html.replace(/^# (.*)$/gm, '<h1>$1</h1>');
-    // newlines to <br>
     html = html.replace(/\n/g, '<br>');
     return html;
 }
@@ -839,42 +831,60 @@ function displayChatHistory() {
 async function sendMessage() {
     const input = document.getElementById('userInput');
     const message = input.value.trim();
-    
     if (!message) return;
-    
-    // Добавляем сообщение пользователя
     const userMessage = { role: 'user', content: message };
     chatHistory.push(userMessage);
-    
-    // Очищаем поле ввода
     input.value = '';
-    
-    // Обновляем отображение чата
     displayChatHistory();
-    
-    // Показываем индикатор загрузки
     const loadingDiv = document.createElement('div');
     loadingDiv.className = 'message bot-message';
     loadingDiv.innerHTML = '<div class="loading"></div> Думаю...';
     document.getElementById('messages').appendChild(loadingDiv);
-    
+    await chrome.storage.local.set({ pendingUserMessage: message });
     try {
-        // Получаем API ключ
-        const apiKey = await getApiKey();
-        if (!apiKey) {
-            throw new Error('API ключ не найден. Сохраните ключ в настройках.');
+        await chrome.runtime.sendMessage({
+            action: 'sendChatMessage',
+            history: chatHistory
+        });
+    } catch (error) {
+        loadingDiv.remove();
+        chatHistory.pop();
+        const errorMessage = { role: 'assistant', content: `❌ Ошибка: ${error.message}` };
+        chatHistory.push(errorMessage);
+        displayChatHistory();
+        await chrome.storage.local.remove(['pendingUserMessage', 'pendingBotResponse']);
+        console.error('Ошибка отправки сообщения (background):', error);
+    }
+}
+
+async function restoreChatState() {
+    await loadChatHistory();
+    const result = await chrome.storage.local.get(['pendingUserMessage', 'pendingBotResponse']);
+    if (result.pendingUserMessage && !result.pendingBotResponse) {
+        const userMessage = { role: 'user', content: result.pendingUserMessage };
+        if (!chatHistory.length || chatHistory[chatHistory.length-1].content !== userMessage.content) {
+            chatHistory.push(userMessage);
         }
-        
-        // Формируем историю сообщений для контекста
+        displayChatHistory();
+        const messagesDiv = document.getElementById('messages');
+        if (!messagesDiv.querySelector('.loading')) {
+            const loadingDiv = document.createElement('div');
+            loadingDiv.className = 'message bot-message';
+            loadingDiv.innerHTML = '<div class="loading"></div> Думаю...';
+            messagesDiv.appendChild(loadingDiv);
+        }
+        resendPendingMessage(result.pendingUserMessage);
+    }
+}
+
+async function resendPendingMessage(message) {
+    try {
+        const apiKey = await getApiKey();
+        if (!apiKey) throw new Error('API ключ не найден. Сохраните ключ в настройках.');
         const messages = [
-            { 
-                role: 'system', 
-                content: 'Ты - полезный AI помощник для проверки фактов и анализа новостей. Отвечай точно и информативно.' 
-            },
-            ...chatHistory.slice(-10) // Последние 10 сообщений для контекста
+            { role: 'system', content: 'Ты - полезный AI помощник для проверки фактов и анализа новостей. Отвечай точно и информативно.' },
+            ...chatHistory.slice(-10)
         ];
-        
-        // Отправляем запрос к DeepSeek API
         const response = await fetch('https://api.deepseek.com/v1/chat/completions', {
             method: 'POST',
             headers: {
@@ -888,7 +898,6 @@ async function sendMessage() {
                 temperature: 0.7
             })
         });
-        
         if (!response.ok) {
             let shortMsg = `Ошибка API: ${response.status}`;
             try {
@@ -899,40 +908,26 @@ async function sendMessage() {
             } catch {}
             throw new Error(shortMsg);
         }
-        
         const data = await response.json();
         const botMessage = data.choices[0].message.content;
-        
-        // Убираем индикатор загрузки
-        loadingDiv.remove();
-        
-        // Добавляем ответ бота
+        const messagesDiv = document.getElementById('messages');
+        const loadingDiv = messagesDiv.querySelector('.loading')?.parentElement;
+        if (loadingDiv) loadingDiv.remove();
         const botMessageObj = { role: 'assistant', content: botMessage };
         chatHistory.push(botMessageObj);
-        
-        // Обновляем отображение чата
         displayChatHistory();
-        
-        // Сохраняем историю (ограничиваем размер)
-        if (chatHistory.length > 50) {
-            chatHistory = chatHistory.slice(-25);
-        }
+        if (chatHistory.length > 50) chatHistory = chatHistory.slice(-25);
         await chrome.storage.local.set({ chatHistory });
-        
+        await chrome.storage.local.remove(['pendingUserMessage', 'pendingBotResponse']);
     } catch (error) {
-        // Убираем индикатор загрузки
-        loadingDiv.remove();
-        
-        // Удаляем последнее сообщение пользователя при ошибке
+        const messagesDiv = document.getElementById('messages');
+        const loadingDiv = messagesDiv.querySelector('.loading')?.parentElement;
+        if (loadingDiv) loadingDiv.remove();
         chatHistory.pop();
-        
-        // Показываем сообщение об ошибке
         const errorMessage = { role: 'assistant', content: `❌ Ошибка: ${error.message}` };
         chatHistory.push(errorMessage);
-        
-        // Обновляем отображение чата
         displayChatHistory();
-        
+        await chrome.storage.local.remove(['pendingUserMessage', 'pendingBotResponse']);
         console.error('Ошибка отправки сообщения:', error);
     }
 }
@@ -965,7 +960,6 @@ async function clearAllData() {
         document.getElementById('messages').innerHTML = '';
         showMessage('Все данные очищены', 'success');
         
-        // Показываем приветственное сообщение
         displayChatHistory();
     }
 }
@@ -986,7 +980,6 @@ async function loadSettings() {
 }
 
 function showMessage(message, type) {
-    // Создаем элемент для сообщения
     const messageDiv = document.createElement('div');
     messageDiv.className = type === 'error' ? 'error-message' : 'success-message';
     messageDiv.textContent = message;
