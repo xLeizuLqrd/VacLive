@@ -1,75 +1,15 @@
+// popup.js
 const CONFIG = {
     MAX_TEXT_LENGTH: 8000,
-    ANALYSIS_PROMPT: `Ты — профессиональный фактчекер. Проанализируй предоставленный текст новости и дай четкую оценку достоверности.
-
-**КРИТЕРИИ АНАЛИЗА:**
-1. Проверь ВСЕ ключевые факты: даты, имена, цифры, события, цитаты
-2. Сравни информацию с ОФИЦИАЛЬНЫМИ ИСТОЧНИКАМИ (госсайты, пресс-релизы, проверенные СМИ)
-3. Используй перекрестную проверку: информация должна подтверждаться минимум 2-3 независимыми источниками
-4. Особое внимание удели совпадению с официальными данными
-
-**ТРЕБОВАНИЯ К ИСТОЧНИКАМ:**
-- Сайт ДОЛЖЕН БЫТЬ РАБОЧИМ и доступным (проверь статус 200)
-- Содержание ДОЛЖНО СООТВЕТСТВОВАТЬ теме проверяемого факта
-- Приоритет официальным источникам (.gov.ru, .kremlin.ru и т.д.)
-- Проверенные СМИ с хорошей репутацией
-
-**ПРОВЕРЬ КАЖДУЮ ССЫЛКУ ПЕРЕД ИСПОЛЬЗОВАНИЕМ:**
-- Открывается ли сайт?
-- Есть ли на странице нужная информация?
-- Актуальна ли дата публикации?
-- Не является ли сайт сатирическим/фейковым?
-
-**ВЕРДИКТ ДОЛЖЕН БЫТЬ ЧЕТКИМ:**
-- "Правдивые" - если ВСЕ факты подтверждены РАБОЧИМИ официальными источниками
-- "Недостоверные" - если есть ложные факты или источники нерабочие
-- "Частично правдивые" - если часть информации подтверждена рабочими источниками
-
-Верни ответ ТОЛЬКО в формате JSON:
-{
-    "verdict": "Правдивые|Недостоверные|Частично правдивые",
-    "confidence_level": "высокий|средний|низкий",
-    "fact_check": {
-        "verified_facts": [
-            {
-                "fact": "конкретный факт",
-                "source": "https://рабочий-официальный-источник.ru",
-                "source_status": "рабочий|проверен",
-                "content_match": "полное|частичное|не соответствует"
-            }
-        ],
-        "false_claims": [
-            {
-                "claim": "ложное утверждение", 
-                "contradiction_source": "https://опровергающий-источник.ru",
-                "source_status": "рабочий|проверен",
-                "contradiction_type": "прямое опровержение|отсутствие данных"
-            }
-        ],
-        "unverified_claims": [
-            {
-                "claim": "неподтвержденное утверждение",
-                "reason": "нет данных в рабочих источниках|источники недоступны",
-                "attempted_sources": ["https://источник1", "https://источник2"]
-            }
-        ]
-    },
-    "sources_validation": {
-        "working_sources": число,
-        "broken_sources": число,
-        "official_sources_count": число,
-        "cross_verification_score": число_0-10
-    },
-    "summary": "краткое обоснование с акцентом на проверке источников",
-    "recommendations": ["рекомендация1", "рекомендация2"]
-}`
+    MAX_FILE_SIZE: 5 * 1024 * 1024,
+    ANALYSIS_PROMPT: `Ты — профессиональный фактчекер. Проанализируй предоставленный текст новости и дай четкую оценку достоверности.`
 };
 
-// Глобальные переменные
 let currentTheme = 'light';
 let analysisHistory = [];
+let currentAttachments = [];
+let backgroundAnalysisCheckInterval = null;
 
-// Инициализация
 document.addEventListener('DOMContentLoaded', async function() {
     const result = await chrome.storage.local.get(['analysedText']);
     if (result.analysedText) {
@@ -87,6 +27,9 @@ async function initializeApp() {
     setupEventListeners();
     setupTabs();
     loadAnalysisHistory();
+    checkBackgroundAnalysis();
+    
+    backgroundAnalysisCheckInterval = setInterval(checkBackgroundAnalysis, 2000);
 }
 
 function setupEventListeners() {
@@ -114,6 +57,12 @@ function setupEventListeners() {
     document.getElementById('userInput').addEventListener('keypress', e => {
         if (e.key === 'Enter') sendMessage();
     });
+    
+    document.getElementById('fileUploadBtn').addEventListener('click', () => {
+        document.getElementById('fileInput').click();
+    });
+    
+    document.getElementById('fileInput').addEventListener('change', handleFileSelect);
     
     document.getElementById('analyzeTextBtn').addEventListener('click', analyzeTextHandler);
     document.getElementById('analyzePage').addEventListener('click', analyzeCurrentPage);
@@ -146,28 +95,23 @@ function setupTabs() {
         tab.addEventListener('click', () => {
             const tabName = tab.getAttribute('data-tab');
             
-            // Убираем активный класс у всех вкладок
             tabs.forEach(t => t.classList.remove('active'));
             tabContents.forEach(tc => tc.classList.remove('active'));
             
-            // Добавляем активный класс к выбранной вкладке
             tab.classList.add('active');
             document.getElementById(`${tabName}-tab`).classList.add('active');
             
-            // Анимируем перемещение индикатора
             moveIndicator();
             
-            // Загружаем историю если нужно
             if (tabName === 'history') {
                 displayAnalysisHistory();
+            } else if (tabName === 'analyzer') {
+                checkBackgroundAnalysis();
             }
         });
     });
 
-    // Обновляем индикатор при изменении размера окна
     window.addEventListener('resize', moveIndicator);
-    
-    // Инициализируем позицию индикатора
     setTimeout(moveIndicator, 100);
 }
 
@@ -175,6 +119,220 @@ async function toggleTheme() {
     currentTheme = currentTheme === 'light' ? 'dark' : 'light';
     document.body.setAttribute('data-theme', currentTheme);
     await chrome.storage.local.set({ theme: currentTheme });
+}
+
+async function handleFileSelect(event) {
+    const files = Array.from(event.target.files);
+    
+    for (const file of files) {
+        if (file.size > CONFIG.MAX_FILE_SIZE) {
+            showError(`Файл "${file.name}" слишком большой. Максимальный размер: 5MB`);
+            continue;
+        }
+        
+        const validTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/jpg', 'image/webp', 
+                           'application/pdf', 'text/plain', 'text/csv', 'text/html',
+                           'application/msword', 
+                           'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                           'application/vnd.ms-excel',
+                           'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'];
+        
+        if (!validTypes.includes(file.type) && !file.name.match(/\.(txt|pdf|doc|docx|xls|xlsx|csv|html)$/i)) {
+            showError(`Неподдерживаемый тип файла: ${file.name}`);
+            continue;
+        }
+        
+        if (!currentAttachments.some(att => att.name === file.name && att.size === file.size)) {
+            if (file.type.startsWith('text/') || file.name.match(/\.(txt|csv|html)$/i)) {
+                try {
+                    const content = await readTextFile(file);
+                    file.textContent = content.substring(0, CONFIG.MAX_TEXT_LENGTH);
+                } catch (error) {
+                    console.error('Ошибка чтения файла:', error);
+                    file.textContent = '[Не удалось прочитать содержимое файла]';
+                }
+            }
+            
+            if (file.type === 'application/pdf' || file.name.match(/\.(pdf|doc|docx|xls|xlsx)$/i)) {
+                try {
+                    const content = await extractTextFromFile(file);
+                    file.textContent = content.substring(0, CONFIG.MAX_TEXT_LENGTH);
+                } catch (error) {
+                    console.error('Ошибка извлечения текста:', error);
+                    file.textContent = '[Содержимое недоступно для анализа]';
+                }
+            }
+            
+            try {
+                file.base64 = await fileToBase64(file);
+            } catch (error) {
+                console.error('Ошибка конвертации файла в base64:', error);
+            }
+            
+            currentAttachments.push(file);
+        }
+    }
+    
+    updateAttachmentsPreview();
+    event.target.value = '';
+}
+
+function fileToBase64(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result.split(',')[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+    });
+}
+
+function base64ToFile(base64, filename, mimeType) {
+    const byteCharacters = atob(base64);
+    const byteArrays = [];
+    
+    for (let offset = 0; offset < byteCharacters.length; offset += 512) {
+        const slice = byteCharacters.slice(offset, offset + 512);
+        const byteNumbers = new Array(slice.length);
+        
+        for (let i = 0; i < slice.length; i++) {
+            byteNumbers[i] = slice.charCodeAt(i);
+        }
+        
+        const byteArray = new Uint8Array(byteNumbers);
+        byteArrays.push(byteArray);
+    }
+    
+    const blob = new Blob(byteArrays, { type: mimeType });
+    blob.name = filename;
+    return blob;
+}
+
+function readTextFile(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (e) => resolve(e.target.result);
+        reader.onerror = (e) => reject(e);
+        reader.readAsText(file, 'UTF-8');
+    });
+}
+
+async function extractTextFromFile(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        
+        reader.onload = function(e) {
+            try {
+                const data = e.target.result;
+                
+                if (file.type === 'application/pdf' || file.name.endsWith('.pdf')) {
+                    resolve(extractTextFromPDF(data));
+                } else if (file.name.match(/\.(doc|docx)$/i)) {
+                    resolve(extractTextFromDOC(data));
+                } else if (file.name.match(/\.(xls|xlsx)$/i)) {
+                    resolve(extractTextFromExcel(data));
+                } else {
+                    resolve('Содержимое файла недоступно для анализа');
+                }
+            } catch (error) {
+                reject(error);
+            }
+        };
+        
+        reader.onerror = reject;
+        
+        if (file.type === 'application/pdf' || file.name.endsWith('.pdf')) {
+            reader.readAsArrayBuffer(file);
+        } else {
+            reader.readAsText(file, 'UTF-8');
+        }
+    });
+}
+
+function extractTextFromPDF(data) {
+    const uint8Array = new Uint8Array(data);
+    const textDecoder = new TextDecoder('utf-8');
+    const pdfText = textDecoder.decode(uint8Array);
+    
+    const textMatches = pdfText.match(/\(([^)]+)\)/g);
+    if (textMatches) {
+        return textMatches.map(match => match.slice(1, -1)).join(' ')
+                         .replace(/\\n/g, ' ')
+                         .replace(/\s+/g, ' ')
+                         .trim();
+    }
+    
+    return 'Текст из PDF недоступен для автоматического извлечения';
+}
+
+function extractTextFromDOC(data) {
+    return data.replace(/<[^>]*>/g, ' ')
+              .replace(/[^\w\sа-яА-ЯёЁ.,!?;:()-]/g, ' ')
+              .replace(/\s+/g, ' ')
+              .trim();
+}
+
+function extractTextFromExcel(data) {
+    return data.split('\n')
+              .map(line => line.split('\t').join(' | '))
+              .join('\n')
+              .substring(0, CONFIG.MAX_TEXT_LENGTH);
+}
+
+function updateAttachmentsPreview() {
+    const previewContainer = document.getElementById('attachmentsPreview');
+    
+    if (currentAttachments.length === 0) {
+        previewContainer.style.display = 'none';
+        previewContainer.innerHTML = '';
+        return;
+    }
+    
+    previewContainer.style.display = 'flex';
+    previewContainer.innerHTML = '';
+    
+    currentAttachments.forEach((file, index) => {
+        const attachmentItem = document.createElement('div');
+        attachmentItem.className = 'attachment-item';
+        
+        const fileIcon = getFileIcon(file.type);
+        const fileSize = formatFileSize(file.size);
+        const hasContent = file.textContent && file.textContent !== '[Содержимое недоступно для анализа]';
+        
+        attachmentItem.innerHTML = `
+            <span>${fileIcon} ${hasContent ? '📖' : ''}</span>
+            <span style="max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" 
+                  title="${file.name}">${file.name}</span>
+            <span style="color: var(--text-secondary); font-size: 10px;">${fileSize}</span>
+            <button class="remove-attachment" data-index="${index}">×</button>
+        `;
+        
+        previewContainer.appendChild(attachmentItem);
+    });
+    
+    previewContainer.querySelectorAll('.remove-attachment').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const index = parseInt(e.target.getAttribute('data-index'));
+            currentAttachments.splice(index, 1);
+            updateAttachmentsPreview();
+        });
+    });
+}
+
+function getFileIcon(fileType) {
+    if (fileType.startsWith('image/')) return '🖼️';
+    if (fileType === 'application/pdf') return '📄';
+    if (fileType.includes('word')) return '📝';
+    if (fileType.includes('excel') || fileType.includes('spreadsheet')) return '📊';
+    if (fileType.startsWith('text/') || fileType === 'text/plain') return '📃';
+    if (fileType === 'text/html') return '🌐';
+    if (fileType === 'text/csv') return '📋';
+    return '📎';
+}
+
+function formatFileSize(bytes) {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
 }
 
 async function analyzeCurrentPage() {
@@ -189,7 +347,7 @@ async function analyzeCurrentPage() {
         if (results[0].result) {
             const pageContent = results[0].result;
             document.getElementById('analyzeText').value = pageContent;
-            await performAnalysis(pageContent, `Анализ страницы: ${tab.title}`);
+            await startBackgroundAnalysis(pageContent, `Анализ страницы: ${tab.title}`, tab.id);
         }
     } catch (error) {
         showError('Не удалось получить содержимое страницы. Убедитесь, что у расширения есть необходимые разрешения.');
@@ -261,153 +419,177 @@ async function analyzeTextHandler() {
         return;
     }
     
-    await performAnalysis(text, 'Анализ текста');
+    await startBackgroundAnalysis(text, 'Анализ текста');
 }
 
-async function performAnalysis(text, title = 'Анализ') {
+async function startBackgroundAnalysis(text, title = 'Анализ', tabId = null) {
     const analyzeBtn = document.getElementById('analyzeTextBtn');
+    const analyzePageBtn = document.getElementById('analyzePage');
     const originalText = analyzeBtn.textContent;
+    const originalPageText = analyzePageBtn.textContent;
     
     try {
-        analyzeBtn.innerHTML = '<span class="loading"></span> Анализируем...';
+        analyzeBtn.innerHTML = '<span class="loading"></span> Запуск...';
         analyzeBtn.disabled = true;
+        analyzePageBtn.disabled = true;
         
-        const result = await analyzeTextWithAI(text);
-        displayAnalysisResult(result);
-        
-        await saveToAnalysisHistory({
-            title: title,
-            text: text.substring(0, 500) + (text.length > 500 ? '...' : ''),
-            result: result,
-            timestamp: new Date().toISOString()
+        const response = await chrome.runtime.sendMessage({
+            action: "startBackgroundAnalysis",
+            data: {
+                text: text,
+                title: title,
+                tabId: tabId
+            }
         });
+        
+        if (response.status === "started") {
+            showMessage('Анализ запущен в фоне. Вы можете закрыть это окно - результат придет в уведомлении.', 'success');
+            
+            displayAnalysisStatus({
+                status: "processing",
+                title: title,
+                progress: 0
+            });
+        }
         
     } catch (error) {
         showError(error.message);
-    } finally {
         analyzeBtn.textContent = originalText;
+        analyzePageBtn.textContent = originalPageText;
         analyzeBtn.disabled = false;
+        analyzePageBtn.disabled = false;
     }
 }
 
-async function analyzeTextWithAI(text) {
-    if (!text.trim()) {
-        throw new Error('Введите текст для анализа');
-    }
-    
-    const apiKey = await getApiKey();
-    if (!apiKey) {
-        throw new Error('API ключ не найден. Сохраните ключ в настройках.');
-    }
-    
-    const prompt = `${CONFIG.ANALYSIS_PROMPT}\n\nТЕКСТ ДЛЯ АНАЛИЗА:\n${text.substring(0, CONFIG.MAX_TEXT_LENGTH)}`;
-    
-    const response = await fetch('https://api.deepseek.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${apiKey}`
-        },
-        body: JSON.stringify({
-            model: 'deepseek-chat',
-            messages: [{ role: 'user', content: prompt }],
-            max_tokens: 2500,
-            temperature: 0.3
-        })
-    });
-    
-    if (!response.ok) {
-        throw new Error(`Ошибка API: ${response.status}`);
-    }
-    
-    const data = await response.json();
-    return parseAnalysisResult(data.choices[0].message.content);
-}
-
-function parseAnalysisResult(result) {
+async function checkBackgroundAnalysis() {
     try {
-        const jsonMatch = result.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-            return JSON.parse(jsonMatch[0]);
+        const response = await chrome.runtime.sendMessage({
+            action: "getAnalysisStatus"
+        });
+        
+        if (response && response.analysis) {
+            displayAnalysisStatus(response.analysis);
+            
+            if (response.analysis.status === "completed") {
+                displayAnalysisResult(response.analysis.result);
+                
+                const analyzeBtn = document.getElementById('analyzeTextBtn');
+                const analyzePageBtn = document.getElementById('analyzePage');
+                analyzeBtn.textContent = 'Анализ текста';
+                analyzeBtn.disabled = false;
+                analyzePageBtn.textContent = 'Анализ страницы';
+                analyzePageBtn.disabled = false;
+                
+            } else if (response.analysis.status === "error") {
+                showError(`Ошибка анализа: ${response.analysis.error}`);
+                
+                const analyzeBtn = document.getElementById('analyzeTextBtn');
+                const analyzePageBtn = document.getElementById('analyzePage');
+                analyzeBtn.textContent = 'Анализ текста';
+                analyzeBtn.disabled = false;
+                analyzePageBtn.textContent = 'Анализ страницы';
+                analyzePageBtn.disabled = false;
+            }
         }
-        throw new Error('Неверный формат ответа от AI');
     } catch (error) {
-        console.error('Ошибка парсинга:', error);
-        return createDefaultAnalysisResult();
+        console.log('Background script не доступен');
     }
 }
 
-function createDefaultAnalysisResult() {
-    return {
-        verdict: "Не удалось проанализировать",
-        confidence_level: "низкий",
-        fact_check: {
-            verified_facts: [],
-            false_claims: [],
-            unverified_claims: []
-        },
-        sources_validation: {
-            working_sources: 0,
-            broken_sources: 0,
-            official_sources_count: 0,
-            cross_verification_score: 0
-        },
-        summary: "Произошла ошибка при анализе текста",
-        recommendations: ["Попробуйте проанализировать другой текст"]
-    };
+function displayAnalysisStatus(analysis) {
+    const resultDiv = document.getElementById('analysisResult');
+    
+    if (analysis.status === "processing") {
+        resultDiv.innerHTML = `
+            <div class="analysis-item">
+                <div style="font-weight: 600; margin-bottom: 12px;">🔄 АНАЛИЗ В ПРОЦЕССЕ</div>
+                <div style="margin-bottom: 8px;">
+                    <strong>Задача:</strong> ${analysis.title}
+                </div>
+                <div style="margin-bottom: 12px;">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                        <span>Прогресс:</span>
+                        <span>${analysis.progress}%</span>
+                    </div>
+                    <div style="background: var(--border); height: 8px; border-radius: 4px; overflow: hidden;">
+                        <div style="background: var(--primary); height: 100%; width: ${analysis.progress}%; transition: width 0.3s ease;"></div>
+                    </div>
+                </div>
+                <div style="font-size: 12px; color: var(--text-secondary);">
+                    Анализ выполняется в фоне. Закройте это окно - результат придет в уведомлении.
+                </div>
+            </div>
+        `;
+    }
 }
 
 function displayAnalysisResult(result) {
     const resultDiv = document.getElementById('analysisResult');
     resultDiv.innerHTML = '';
     
-    // Вердикт с цветом
+    // Гарантируем, что все поля существуют
+    const safeResult = {
+        verdict: result.verdict || "Не удалось проанализировать",
+        confidence_level: result.confidence_level || "низкий",
+        fact_check: result.fact_check || {
+            verified_facts: [],
+            false_claims: [],
+            unverified_claims: []
+        },
+        sources_validation: result.sources_validation || {
+            working_sources: 0,
+            broken_sources: 0,
+            official_sources_count: 0,
+            cross_verification_score: 0
+        },
+        summary: result.summary || "Результат анализа не содержит подробного описания",
+        recommendations: result.recommendations || ["Рекомендуется проверить информацию дополнительно"]
+    };
+    
     const verdict = document.createElement('div');
     verdict.className = 'analysis-item';
     
     let verdictClass = 'verdict-warning';
     let verdictText = '';
     
-    if (result.verdict === 'Правдивые') {
+    if (safeResult.verdict === 'Правдивые') {
         verdictClass = 'verdict-true';
         verdictText = '✅ ПРАВДИВЫЕ НОВОСТИ';
-    } else if (result.verdict === 'Недостоверные') {
+    } else if (safeResult.verdict === 'Недостоверные') {
         verdictClass = 'verdict-false';
         verdictText = '❌ НЕДОСТОВЕРНЫЕ НОВОСТИ';
-    } else {
+    } else if (safeResult.verdict === 'Частично правдивые') {
         verdictText = '⚠️ ЧАСТИЧНО ПРАВДИВЫЕ';
+    } else {
+        verdictText = '❓ НЕОПРЕДЕЛЕННЫЙ РЕЗУЛЬТАТ';
     }
     
     verdict.innerHTML = `
         <div class="verdict-header ${verdictClass}">${verdictText}</div>
-        <div class="confidence-level">Уровень уверенности: ${result.confidence_level}</div>
-        <div class="analysis-details">${result.summary}</div>
+        <div class="confidence-level">Уровень уверенности: ${safeResult.confidence_level}</div>
+        <div class="analysis-details">${safeResult.summary}</div>
     `;
     resultDiv.appendChild(verdict);
     
-    // Валидация источников
-    if (result.sources_validation) {
-        const validationSection = document.createElement('div');
-        validationSection.className = 'analysis-item';
-        validationSection.innerHTML = `
-            <div style="font-weight: 600; margin-bottom: 8px;">🔍 ПРОВЕРКА ИСТОЧНИКОВ:</div>
-            <div class="analysis-details">
-                <strong>Рабочих источников:</strong> ${result.sources_validation.working_sources || 0}<br>
-                <strong>Нерабочих источников:</strong> ${result.sources_validation.broken_sources || 0}<br>
-                <strong>Официальных источников:</strong> ${result.sources_validation.official_sources_count || 0}<br>
-                <strong>Оценка перекрестной проверки:</strong> ${result.sources_validation.cross_verification_score || 0}/10
-            </div>
-        `;
-        resultDiv.appendChild(validationSection);
-    }
+    const validationSection = document.createElement('div');
+    validationSection.className = 'analysis-item';
+    validationSection.innerHTML = `
+        <div style="font-weight: 600; margin-bottom: 8px;">🔍 ПРОВЕРКА ИСТОЧНИКОВ:</div>
+        <div class="analysis-details">
+            <strong>Рабочих источников:</strong> ${safeResult.sources_validation.working_sources}<br>
+            <strong>Нерабочих источников:</strong> ${safeResult.sources_validation.broken_sources}<br>
+            <strong>Официальных источников:</strong> ${safeResult.sources_validation.official_sources_count}<br>
+            <strong>Оценка перекрестной проверки:</strong> ${safeResult.sources_validation.cross_verification_score}/10
+        </div>
+    `;
+    resultDiv.appendChild(validationSection);
     
-    // Проверенные факты с статусом источников
-    if (result.fact_check.verified_facts && result.fact_check.verified_facts.length > 0) {
+    if (safeResult.fact_check.verified_facts && safeResult.fact_check.verified_facts.length > 0) {
         const verifiedSection = document.createElement('div');
         verifiedSection.className = 'analysis-item';
         verifiedSection.innerHTML = '<div style="font-weight: 600; margin-bottom: 8px;">✅ ПОДТВЕРЖДЕННЫЕ ФАКТЫ:</div>';
         
-        result.fact_check.verified_facts.forEach((item, index) => {
+        safeResult.fact_check.verified_facts.forEach((item, index) => {
             const factDiv = document.createElement('div');
             factDiv.className = 'fact-item verified';
             
@@ -416,65 +598,62 @@ function displayAnalysisResult(result) {
                               item.content_match === 'частичное' ? '⚠️' : '❌';
             
             factDiv.innerHTML = `
-                <strong>Факт ${index + 1}:</strong> ${item.fact}
-                <br><small>${statusIcon} Источник: <a href="${item.source}" target="_blank" style="color: #666; text-decoration: underline;">${item.source}</a></small>
-                <br><small>${matchLevel} Соответствие: ${item.content_match}</small>
+                <strong>Факт ${index + 1}:</strong> ${item.fact || 'Не указан'}
+                <br><small>${statusIcon} Источник: <a href="${item.source || '#'}" target="_blank" style="color: #666; text-decoration: underline;">${item.source || 'Не указан'}</a></small>
+                <br><small>${matchLevel} Соответствие: ${item.content_match || 'Не указано'}</small>
             `;
             verifiedSection.appendChild(factDiv);
         });
         resultDiv.appendChild(verifiedSection);
     }
     
-    // Ложные утверждения
-    if (result.fact_check.false_claims && result.fact_check.false_claims.length > 0) {
+    if (safeResult.fact_check.false_claims && safeResult.fact_check.false_claims.length > 0) {
         const falseSection = document.createElement('div');
         falseSection.className = 'analysis-item';
         falseSection.innerHTML = '<div style="font-weight: 600; margin-bottom: 8px;">❌ ОПРОВЕРГНУТЫЕ УТВЕРЖДЕНИЯ:</div>';
         
-        result.fact_check.false_claims.forEach((item, index) => {
+        safeResult.fact_check.false_claims.forEach((item, index) => {
             const claimDiv = document.createElement('div');
             claimDiv.className = 'fact-item false';
             
             const statusIcon = item.source_status === 'рабочий' ? '🟢' : '🟡';
             
             claimDiv.innerHTML = `
-                <strong>Ложное утверждение ${index + 1}:</strong> ${item.claim}
-                <br><small>${statusIcon} Опровержение: <a href="${item.contradiction_source}" target="_blank" style="color: #666; text-decoration: underline;">${item.contradiction_source}</a></small>
-                <br><small>📋 Тип опровержения: ${item.contradiction_type}</small>
+                <strong>Ложное утверждение ${index + 1}:</strong> ${item.claim || 'Не указан'}
+                <br><small>${statusIcon} Опровержение: <a href="${item.contradiction_source || '#'}" target="_blank" style="color: #666; text-decoration: underline;">${item.contradiction_source || 'Не указан'}</a></small>
+                <br><small>📋 Тип опровержения: ${item.contradiction_type || 'Не указан'}</small>
             `;
             falseSection.appendChild(claimDiv);
         });
         resultDiv.appendChild(falseSection);
     }
     
-    // Неподтвержденные утверждения
-    if (result.fact_check.unverified_claims && result.fact_check.unverified_claims.length > 0) {
+    if (safeResult.fact_check.unverified_claims && safeResult.fact_check.unverified_claims.length > 0) {
         const unverifiedSection = document.createElement('div');
         unverifiedSection.className = 'analysis-item';
         unverifiedSection.innerHTML = '<div style="font-weight: 600; margin-bottom: 8px;">❓ НЕПОДТВЕРЖДЕННЫЕ УТВЕРЖДЕНИЯ:</div>';
         
-        result.fact_check.unverified_claims.forEach((item, index) => {
+        safeResult.fact_check.unverified_claims.forEach((item, index) => {
             const claimDiv = document.createElement('div');
             claimDiv.className = 'fact-item unverified';
             
             claimDiv.innerHTML = `
-                <strong>Утверждение ${index + 1}:</strong> ${item.claim}
-                <br><small>📋 Причина: ${item.reason}</small>
+                <strong>Утверждение ${index + 1}:</strong> ${item.claim || 'Не указан'}
+                <br><small>📋 Причина: ${item.reason || 'Не указана'}</small>
                 ${item.attempted_sources && item.attempted_sources.length > 0 ? 
                     `<br><small>🔍 Проверенные источники: ${item.attempted_sources.join(', ')}</small>` : ''}
-            `;
-            unverifiedSection.appendChild(claimDiv);
+           `;
+                           unverifiedSection.appendChild(claimDiv);
         });
         resultDiv.appendChild(unverifiedSection);
     }
     
-    // Рекомендации
-    if (result.recommendations && result.recommendations.length > 0) {
+    if (safeResult.recommendations && safeResult.recommendations.length > 0) {
         const recSection = document.createElement('div');
         recSection.className = 'analysis-item';
         recSection.innerHTML = '<div style="font-weight: 600; margin-bottom: 8px;">💡 РЕКОМЕНДАЦИИ:</div>';
         
-        result.recommendations.forEach((rec, index) => {
+        safeResult.recommendations.forEach((rec, index) => {
             const recDiv = document.createElement('div');
             recDiv.className = 'analysis-details';
             recDiv.innerHTML = `${index + 1}. ${rec}`;
@@ -508,6 +687,7 @@ function displayAnalysisHistory() {
         let verdictIcon = '❓';
         if (item.result.verdict === 'Правдивые') verdictIcon = '✅';
         if (item.result.verdict === 'Недостоверные') verdictIcon = '❌';
+        if (item.result.verdict === 'Частично правдивые') verdictIcon = '⚠️';
         
         historyItem.innerHTML = `
             <div style="font-weight: 600; margin-bottom: 4px;">${verdictIcon} ${item.title}</div>
@@ -515,7 +695,7 @@ function displayAnalysisHistory() {
                 ${new Date(item.timestamp).toLocaleString()}
             </div>
             <div style="font-size: 12px; opacity: 0.8;">
-                Вердикт: ${item.result.verdict} (${item.result.confidence_level})
+                Вердикт: ${item.result.verdict} (${item.result.confidence_level || 'неизвестно'})
             </div>
         `;
         historyItem.addEventListener('click', () => {
@@ -607,11 +787,13 @@ async function clearAllData() {
     if (confirm('Очистить все данные (ключ, историю чата, анализы)?')) {
         await chrome.storage.local.clear();
         analysisHistory = [];
+        currentAttachments = [];
         document.getElementById('apiKey').value = '';
         document.getElementById('messages').innerHTML = 
             '<div class="message bot-message">Привет! Я ваш AI помощник для проверки фактов. Чем могу помочь?</div>';
         document.getElementById('analysisResult').innerHTML = 
             '<div class="message bot-message">Результаты проверки фактов появятся здесь...</div>';
+        updateAttachmentsPreview();
         displayAnalysisHistory();
         showMessage('Все данные очищены', 'success');
     }
@@ -621,17 +803,25 @@ async function sendMessage() {
     const userInput = document.getElementById('userInput');
     const message = userInput.value.trim();
     
-    if (!message) return;
+    if (!message && currentAttachments.length === 0) return;
     
-    addMessage(message, true);
+    await saveMessageToHistory(message, currentAttachments, true);
+    
+    addMessageWithAttachments(message, currentAttachments, true);
     userInput.value = '';
     
     try {
         const thinkingMsg = addMessage('Думаю...', false);
-        const response = await sendToDeepSeek(message);
+        
+        const response = await sendToDeepSeek(message, currentAttachments);
         
         thinkingMsg.remove();
         addMessage(response, false);
+        
+        await saveMessageToHistory(response, [], false);
+        
+        currentAttachments = [];
+        updateAttachmentsPreview();
         
     } catch (error) {
         const messages = document.getElementById('messages');
@@ -640,14 +830,35 @@ async function sendMessage() {
             lastMessage.remove();
         }
         addMessage(`❌ Ошибка: ${error.message}`, false);
+        await saveMessageToHistory(`❌ Ошибка: ${error.message}`, [], false);
     }
 }
 
-async function sendToDeepSeek(message) {
+async function sendToDeepSeek(message, attachments = []) {
     const apiKey = await getApiKey();
     if (!apiKey) {
         throw new Error('API ключ не найден. Сохраните ключ в настройках.');
     }
+    
+    const result = await chrome.storage.local.get(['chatHistory']);
+    const chatHistory = result.chatHistory || [];
+    
+    const messages = [];
+    
+    const recentHistory = chatHistory.slice(-10);
+    recentHistory.forEach(msg => {
+        if (!msg.text.includes('❌ Ошибка:') && msg.text !== 'Думаю...') {
+            messages.push({
+                role: msg.isUser ? 'user' : 'assistant',
+                content: formatMessageContent(msg.text, msg.attachments)
+            });
+        }
+    });
+    
+    messages.push({
+        role: 'user',
+        content: formatMessageContent(message, attachments)
+    });
     
     const response = await fetch('https://api.deepseek.com/v1/chat/completions', {
         method: 'POST',
@@ -657,46 +868,145 @@ async function sendToDeepSeek(message) {
         },
         body: JSON.stringify({
             model: 'deepseek-chat',
-            messages: [{ role: 'user', content: message }],
-            max_tokens: 1000,
+            messages: messages,
+            max_tokens: 4000,
             temperature: 0.7
         })
     });
     
     if (!response.ok) {
-        throw new Error(`Ошибка API: ${response.status}`);
+        const errorText = await response.text();
+        throw new Error(`Ошибка API: ${response.status} - ${errorText}`);
     }
     
     const data = await response.json();
     return data.choices[0].message.content;
 }
 
+function formatMessageContent(text, attachments = []) {
+    let content = text;
+    
+    if (attachments.length > 0) {
+        const attachmentsContent = [];
+        
+        for (const file of attachments) {
+            if (file.textContent && file.textContent !== '[Содержимое недоступно для анализа]') {
+                attachmentsContent.push(
+                    `СОДЕРЖИМОЕ ФАЙЛА "${file.name}":\n${file.textContent}`
+                );
+            } else {
+                attachmentsContent.push(
+                    `ФАЙЛ: ${file.name} (${formatFileSize(file.size)}) - содержимое недоступно для анализа`
+                );
+            }
+        }
+        
+        if (attachmentsContent.length > 0) {
+            content += '\n\n' + attachmentsContent.join('\n\n');
+        }
+    }
+    
+    return content;
+}
+
+function addMessageWithAttachments(text, attachments = [], isUser = false) {
+    const messagesDiv = document.getElementById('messages');
+    const messageContainer = document.createElement('div');
+    messageContainer.className = `message ${isUser ? 'user-message' : 'bot-message'}`;
+    
+    if (text) {
+        const textDiv = document.createElement('div');
+        textDiv.textContent = text;
+        messageContainer.appendChild(textDiv);
+    }
+    
+    if (attachments.length > 0) {
+        attachments.forEach(file => {
+            const fileDiv = document.createElement('div');
+            fileDiv.className = 'message-file';
+            fileDiv.fileObj = file;
+            
+            const fileLink = document.createElement('a');
+            fileLink.className = 'file-preview';
+            fileLink.href = URL.createObjectURL(file);
+            fileLink.target = '_blank';
+            fileLink.download = file.name;
+            
+            const fileIcon = getFileIcon(file.type);
+            const fileSize = formatFileSize(file.size);
+            const hasContent = file.textContent && file.textContent !== '[Содержимое недоступно для анализа]';
+            
+            fileLink.innerHTML = `
+                <span class="file-icon">${fileIcon} ${hasContent ? ' ' : ''}</span>
+                <div class="file-info">
+                    <div class="file-name">${file.name}</div>
+                    <div class="file-size">${fileSize}</div>
+                </div>
+            `;
+            
+            fileDiv.appendChild(fileLink);
+            messageContainer.appendChild(fileDiv);
+        });
+    }
+    
+    messagesDiv.appendChild(messageContainer);
+    messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    
+    return messageContainer;
+}
+
 function addMessage(text, isUser = false) {
     const messagesDiv = document.getElementById('messages');
     const messageDiv = document.createElement('div');
     messageDiv.className = `message ${isUser ? 'user-message' : 'bot-message'}`;
-    messageDiv.textContent = text;
+    
+    if (isUser) {
+        messageDiv.textContent = text;
+    } else {
+        let html = text;
+        html = html.replace(/^### (.*)$/gm, '<h3>$1</h3>');
+        html = html.replace(/^## (.*)$/gm, '<h2>$1</h2>');
+        html = html.replace(/^# (.*)$/gm, '<h1>$1</h1>');
+        html = html.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
+        html = html.replace(/\*(?!\*)([^\*]+)\*/g, '<i>$1</i>');
+        if (/^\s*\* /m.test(html)) {
+            html = html.replace(/^(\s*)\* (.+)$/gm, '$1<li>$2</li>');
+            html = html.replace(/((?:<li>.*?<\/li>\s*)+)/gs, '<ul>$1</ul>');
+        }
+        html = html.replace(/([^>])\n/g, '$1<br>');
+        messageDiv.innerHTML = html;
+    }
+    
     messagesDiv.appendChild(messageDiv);
     messagesDiv.scrollTop = messagesDiv.scrollHeight;
-    
-    saveChatHistory();
     return messageDiv;
 }
 
-async function saveChatHistory() {
-    const messages = document.getElementById('messages');
-    const messageElements = messages.getElementsByClassName('message');
-    const chatHistory = [];
+async function saveMessageToHistory(text, attachments = [], isUser = false) {
+    const result = await chrome.storage.local.get(['chatHistory']);
+    const chatHistory = result.chatHistory || [];
     
-    for (let element of messageElements) {
-        const text = element.textContent;
-        if (text !== 'Думаю...' && text !== 'Привет! Я ваш AI помощник для проверки фактов. Чем могу помочь?') {
-            chatHistory.push({
-                text: text,
-                isUser: element.classList.contains('user-message'),
-                timestamp: new Date().toISOString()
-            });
-        }
+    const savedAttachments = [];
+    for (const file of attachments) {
+        const attachment = {
+            name: file.name,
+            size: file.size,
+            type: file.type,
+            textContent: file.textContent,
+            base64: file.base64
+        };
+        savedAttachments.push(attachment);
+    }
+    
+    chatHistory.push({
+        text: text,
+        isUser: isUser,
+        attachments: savedAttachments,
+        timestamp: new Date().toISOString()
+    });
+    
+    if (chatHistory.length > 20) {
+        chatHistory.splice(0, chatHistory.length - 20);
     }
     
     await chrome.storage.local.set({ chatHistory });
@@ -705,10 +1015,29 @@ async function saveChatHistory() {
 function loadChatHistory(history) {
     const messagesDiv = document.getElementById('messages');
     messagesDiv.innerHTML = '';
-    
+
     history.forEach(msg => {
         if (msg.text !== 'Думаю...') {
-            addMessage(msg.text, msg.isUser);
+            if (msg.attachments && msg.attachments.length > 0) {
+                const files = msg.attachments.map(att => {
+                    if (att.base64) {
+                        try {
+                            const file = base64ToFile(att.base64, att.name, att.type);
+                            file.textContent = att.textContent;
+                            file.base64 = att.base64;
+                            return file;
+                        } catch (error) {
+                            console.error('Ошибка восстановления файла:', error);
+                            return null;
+                        }
+                    }
+                    return null;
+                }).filter(Boolean);
+                
+                addMessageWithAttachments(msg.text, files, msg.isUser);
+            } else {
+                addMessage(msg.text, msg.isUser);
+            }
         }
     });
 }
@@ -728,3 +1057,9 @@ function showMessage(message, type = 'info') {
         messageDiv.remove();
     }, 3000);
 }
+
+window.addEventListener('beforeunload', () => {
+    if (backgroundAnalysisCheckInterval) {
+        clearInterval(backgroundAnalysisCheckInterval);
+    }
+});

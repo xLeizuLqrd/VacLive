@@ -1,13 +1,13 @@
 {
   "manifest_version": 3,
   "name": "VacLive",
-  "version": "1.3",
-  "description": "Info Relevance Checker",
+  "version": "1.4",
+  "description": "Info Relevance Checker with Background Analysis",
   
   "icons": {
-  "32": "pictures/icon32.png",
-    "48": "icon48.png",
-    "128": "icon128.png"
+    "32": "pictures/icon32.png",
+    "48": "pictures/icon48.png",
+    "128": "pictures/icon128.png"
   },
   
   "action": {
@@ -19,15 +19,24 @@
     "storage",
     "activeTab",
     "scripting",
-    "contextMenus"
+    "contextMenus",
+    "notifications"
   ],
   
   "host_permissions": [
-    "https://api.deepseek.com/*",
-    "https://*/*",
-    "http://*/*"
+    "https://api.deepseek.com/*"
   ],
+  
   "background": {
     "service_worker": "background.js"
+  },
+  
+  "web_accessible_resources": [{
+    "resources": ["pictures/*"],
+    "matches": ["<all_urls>"]
+  }],
+  
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'"
   }
 }

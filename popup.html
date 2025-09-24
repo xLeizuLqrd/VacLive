@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <title>VacLive</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/mammoth/mammoth.browser.min.js"></script>
     <style>
         * {
             margin: 0;
@@ -57,7 +58,6 @@
         }
 
         .container {
-            /* use the full available popup height instead of a hardcoded px value */
             height: 100%;
             display: flex;
             flex-direction: column;
@@ -86,7 +86,7 @@
         .logo-icon {
             width: 32px;
             height: 32px;
-            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            background: linear-gradient(135deg, #936bf6, var(--primary-dark));
             border-radius: 10px;
             display: flex;
             align-items: center;
@@ -128,7 +128,6 @@
             padding: 4px;
             border: 1px solid var(--border);
             position: relative;
-            /* allow indicator and tabs to extend slightly if needed */
             overflow: visible;
         }
 
@@ -139,9 +138,8 @@
         }
 
         .tab {
-            /* allow equal distribution but prevent extreme shrinking */
             flex: 1 1 0;
-            min-width: 100px; /* prevents tabs from becoming too narrow when space is constrained */
+            min-width: 100px;
             padding: 12px 16px;
             text-align: center;
             cursor: pointer;
@@ -158,7 +156,7 @@
             align-items: center;
             justify-content: center;
             gap: 8px;
-            white-space: nowrap; /* keep icon + text on one line */
+            white-space: nowrap;
         }
 
         .tab.active {
@@ -183,7 +181,6 @@
             flex-direction: column;
             gap: 16px;
             margin-top: 16px;
-            /* allow flex children to shrink correctly inside layout */
             min-height: 0;
         }
 
@@ -265,7 +262,6 @@
         }
 
         /* Chat & Analyzer Containers */
-
         .content-container {
             flex: 1;
             display: flex;
@@ -274,12 +270,10 @@
             border: 1px solid var(--border);
             border-radius: var(--radius-lg);
             overflow: hidden;
-            /* allow children to shrink correctly inside flex layouts */
             min-height: 0;
         }
 
         .messages-container {
-            /* take remaining space but don't force the container to grow beyond parent */
             flex: 1 1 auto;
             min-height: 0;
             overflow-y: auto;
@@ -287,7 +281,6 @@
             display: flex;
             flex-direction: column;
             gap: 12px;
-            /* remove fixed max-height so flex sizing can manage the space */
         }
 
         .message {
@@ -318,14 +311,79 @@
             border-bottom-left-radius: var(--radius-sm);
         }
 
+        .message-file {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
+            padding: 12px;
+            margin: 4px 0;
+            max-width: 200px;
+        }
+
+        .file-preview {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            text-decoration: none;
+            color: var(--text-primary);
+        }
+
+        .file-icon {
+            width: 24px;
+            height: 24px;
+            flex-shrink: 0;
+        }
+
+        .file-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .file-name {
+            font-weight: 500;
+            font-size: 12px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .file-size {
+            font-size: 10px;
+            color: var(--text-secondary);
+        }
+
         .input-container {
             display: flex;
             gap: 8px;
             padding: 16px;
             border-top: 1px solid var(--border);
             background: var(--surface);
-            /* ensure the input area doesn't shrink or get pushed out of view */
             flex-shrink: 0;
+        }
+
+        .file-upload-container {
+            position: relative;
+        }
+
+        .file-upload-btn {
+            padding: 12px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
+            cursor: pointer;
+            transition: var(--transition);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .file-upload-btn:hover {
+            background: var(--card);
+            border-color: var(--primary);
+        }
+
+        .file-input {
+            display: none;
         }
 
         .chat-input {
@@ -357,6 +415,45 @@
             transform: scale(1.05);
         }
 
+        .attachments-preview {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            padding: 8px 16px;
+            border-bottom: 1px solid var(--border);
+            background: var(--surface);
+        }
+
+        .attachment-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            padding: 4px 8px;
+            font-size: 12px;
+        }
+
+        .remove-attachment {
+            background: none;
+            border: none;
+            color: var(--error);
+            cursor: pointer;
+            padding: 2px;
+            border-radius: 50%;
+            width: 16px;
+            height: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .remove-attachment:hover {
+            background: var(--error);
+            color: white;
+        }
+
         /* Analyzer Specific */
         .analyze-textarea {
             flex: 1;
@@ -377,11 +474,12 @@
             display: flex;
             gap: 8px;
             padding: 0 16px;
+            margin-bottom: 16px;
         }
 
         /* Analysis Results */
         .analysis-result {
-            padding: 16px;
+            padding: -10px;
             display: flex;
             flex-direction: column;
             gap: 12px;
@@ -408,6 +506,11 @@
             text-align: center;
             margin-bottom: 12px;
             border: 2px solid;
+        }
+
+        #analysisResult > .analysis-item:first-child,
+        #analysisResult > .verdict-header:first-child {
+            margin-top: 16px;
         }
 
         .verdict-true {
@@ -441,16 +544,19 @@
         .fact-item.verified {
             border-left-color: #10b981;
             background: linear-gradient(135deg, #f0f9ff, #ecfdf5);
+            color: black;
         }
 
         .fact-item.false {
             border-left-color: #ef4444;
             background: linear-gradient(135deg, #fdf2f2, #fef2f2);
+            color: black;
         }
 
         .fact-item.unverified {
             border-left-color: #f59e0b;
             background: linear-gradient(135deg, #fffbf0, #fffbeb);
+            color: black;
         }
 
         .confidence-level {
@@ -560,7 +666,7 @@
                     <span id="themeText">Тема</span>
                 </button>
                 <button id="menuBtn" style="display:none; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 8px; cursor: pointer;">
-                    <span style="display: block; width: 20px; height: 20px;">
+                    <span style="display: block;width: 20px;height: 20px;align-items: center;display: flex;align-content: center;justify-content: center;flex-wrap: wrap;">
                         <span style="display:block; width:100%; height:2px; background:var(--text-secondary); border-radius:1px; margin:3px 0;"></span>
                         <span style="display:block; width:100%; height:2px; background:var(--text-secondary); border-radius:1px; margin:3px 0;"></span>
                         <span style="display:block; width:100%; height:2px; background:var(--text-secondary); border-radius:1px; margin:3px 0;"></span>
@@ -616,7 +722,14 @@
                         Привет! Я ваш AI помощник для проверки фактов. Чем могу помочь?
                     </div>
                 </div>
+                <div class="attachments-preview" id="attachmentsPreview" style="display: none;"></div>
                 <div class="input-container">
+                    <div class="file-upload-container">
+                        <input type="file" id="fileInput" class="file-input" accept="image/*,.pdf,.txt,.doc,.docx,.jpg,.jpeg,.png,.gif" multiple>
+                        <button class="file-upload-btn" id="fileUploadBtn" type="button">
+                            <img src="pictures/attachment32.png" alt="Прикрепить файл" style="width:20px; height:20px;">
+                        </button>
+                    </div>
                     <input type="text" class="chat-input" id="userInput" placeholder="Введите сообщение...">
                     <button class="send-btn" id="sendBtn">
                         <img src="pictures/send32.png" alt="Отправить" style="width:20px; height:20px;">
@@ -689,7 +802,6 @@
             
             updateThemeIcon();
             themeToggle.addEventListener('click', function() {
-                // Эта функция будет вызвана после переключения темы в popup.js
                 setTimeout(updateThemeIcon, 100);
             });
         });
