@@ -1,4 +1,4 @@
-// popup.js - полный исправленный код с работающими кнопками
+// popup.js - полный исправленный код с работающей отменой анализа
 
 const CONFIG = {
     MAX_TEXT_LENGTH: 8000
@@ -118,22 +118,27 @@ function setupMessageHandler() {
     currentMessageHandler = (request, sender, sendResponse) => {
         console.log('Получено сообщение:', request);
         
-        if (request.action === "analysisProgress" && request.analysisId === currentAnalysisId) {
+        // Проверяем что сообщение относится к текущему анализу
+        if (request.analysisId !== currentAnalysisId) {
+            return;
+        }
+        
+        if (request.action === "analysisProgress") {
             console.log('Прогресс анализа:', request.message, request.progress);
             showProgress(request.message, request.progress);
             saveAnalysisState(request.message, request.progress, 'processing');
         }
-        else if (request.action === "analysisComplete" && request.analysisId === currentAnalysisId) {
+        else if (request.action === "analysisComplete") {
             console.log('Анализ завершен:', request.result);
             handleAnalysisComplete(request.result);
-        } else if (request.action === "analysisError" && request.analysisId === currentAnalysisId) {
+        } else if (request.action === "analysisError") {
             console.log('Ошибка анализа:', request.error);
             handleAnalysisError(request.error);
         }
     };
     
     chrome.runtime.onMessage.addListener(currentMessageHandler);
-    console.log('Обработчик сообщений установлен');
+    console.log('Обработчик сообщений установлен для анализа:', currentAnalysisId);
 }
 
 // Проверка статуса анализа
@@ -189,6 +194,12 @@ async function loadAnalysisFromHistory() {
 
 // Обработка завершения анализа
 function handleAnalysisComplete(result) {
+    // Проверяем не был ли анализ отменен
+    if (!currentAnalysisId) {
+        console.log('Анализ был отменен, игнорируем результат');
+        return;
+    }
+    
     hideProgress();
     displayAnalysisResult(result);
     showMessage('Анализ завершен!', 'success');
@@ -200,6 +211,12 @@ function handleAnalysisComplete(result) {
 
 // Обработка ошибки анализа
 function handleAnalysisError(error) {
+    // Проверяем не была ли ошибка из-за отмены
+    if (error.includes('отменен') || error.includes('AbortError')) {
+        console.log('Анализ был отменен пользователем');
+        return;
+    }
+    
     hideProgress();
     showError('Ошибка анализа: ' + error);
     clearAnalysisState();
@@ -488,17 +505,26 @@ async function cancelCurrentAnalysis() {
     if (!currentAnalysisId) return;
     
     try {
-        chrome.runtime.sendMessage({
+        const response = await chrome.runtime.sendMessage({
             action: "cancelAnalysis",
             analysisId: currentAnalysisId
         });
+        
+        if (response && response.success) {
+            hideProgress();
+            clearAnalysisState();
+            showMessage('Анализ успешно отменен', 'success');
+            console.log('Анализ отменен:', currentAnalysisId);
+        } else {
+            showMessage('Не удалось отменить анализ', 'error');
+        }
     } catch (error) {
-        console.log('Не удалось отменить анализ');
+        console.error('Ошибка при отмене анализа:', error);
+        // Все равно скрываем прогресс и очищаем состояние
+        hideProgress();
+        clearAnalysisState();
+        showMessage('Анализ прерван', 'success');
     }
-    
-    hideProgress();
-    clearAnalysisState();
-    showMessage('Анализ отменен', 'success');
 }
 
 // Функция для скрытия индикатора прогресса
@@ -553,7 +579,7 @@ function displayAnalysisResult(result) {
         resultDiv.appendChild(validationSection);
     }
     
-    // Проверенные факты
+    // Проверенные факты с улучшенным отображением источников
     if (result.fact_check && result.fact_check.verified_facts && result.fact_check.verified_facts.length > 0) {
         const verifiedSection = document.createElement('div');
         verifiedSection.className = 'analysis-item';
@@ -563,16 +589,20 @@ function displayAnalysisResult(result) {
             const factDiv = document.createElement('div');
             factDiv.className = 'fact-item verified';
             
+            // Проверяем формат данных
+            const factText = item.fact || item;
+            const sourceText = item.source || 'Источник не указан';
+            
             factDiv.innerHTML = `
-                <strong>Факт ${index + 1}:</strong> ${item.fact || item}
-                <br><small>📎 Источник: ${item.source || 'Не указан'}</small>
+                <strong>Факт ${index + 1}:</strong> ${factText}
+                <br><small>📎 Источник: ${sourceText}</small>
             `;
             verifiedSection.appendChild(factDiv);
         });
         resultDiv.appendChild(verifiedSection);
     }
     
-    // Ложные утверждения
+    // Ложные утверждения с улучшенным отображением источников
     if (result.fact_check && result.fact_check.false_claims && result.fact_check.false_claims.length > 0) {
         const falseSection = document.createElement('div');
         falseSection.className = 'analysis-item';
@@ -582,9 +612,13 @@ function displayAnalysisResult(result) {
             const claimDiv = document.createElement('div');
             claimDiv.className = 'fact-item false';
             
+            // Проверяем формат данных
+            const claimText = item.claim || item;
+            const sourceText = item.contradiction_source || 'Источник опровержения не указан';
+            
             claimDiv.innerHTML = `
-                <strong>Ложное утверждение ${index + 1}:</strong> ${item.claim || item}
-                <br><small>📎 Опровержение: ${item.contradiction_source || 'Не указано'}</small>
+                <strong>Ложное утверждение ${index + 1}:</strong> ${claimText}
+                <br><small>📎 Опровержение: ${sourceText}</small>
             `;
             falseSection.appendChild(claimDiv);
         });
@@ -601,9 +635,13 @@ function displayAnalysisResult(result) {
             const claimDiv = document.createElement('div');
             claimDiv.className = 'fact-item unverified';
             
+            // Проверяем формат данных
+            const claimText = item.claim || item;
+            const reasonText = item.reason || 'Причина непроверенности не указана';
+            
             claimDiv.innerHTML = `
-                <strong>Утверждение ${index + 1}:</strong> ${item.claim || item}
-                <br><small>📋 Причина: ${item.reason || 'Не указана'}</small>
+                <strong>Утверждение ${index + 1}:</strong> ${claimText}
+                <br><small>📋 Причина: ${reasonText}</small>
             `;
             unverifiedSection.appendChild(claimDiv);
         });
@@ -624,6 +662,36 @@ function displayAnalysisResult(result) {
         });
         resultDiv.appendChild(recSection);
     }
+    
+    // Добавляем предупреждение если источники не указаны
+    if (!hasProperSources(result)) {
+        const warningSection = document.createElement('div');
+        warningSection.className = 'analysis-item';
+        warningSection.innerHTML = `
+            <div style="font-weight: 600; margin-bottom: 8px; color: #f59e0b;">⚠️ ВНИМАНИЕ:</div>
+            <div class="analysis-details">
+                В анализе отсутствуют конкретные источники. Рекомендуется провести дополнительную проверку информации.
+            </div>
+        `;
+        resultDiv.appendChild(warningSection);
+    }
+}
+
+// Вспомогательная функция для проверки наличия источников
+function hasProperSources(result) {
+    if (!result.fact_check) return false;
+    
+    let hasSources = false;
+    
+    // Проверяем проверенные факты
+    if (result.fact_check.verified_facts && result.fact_check.verified_facts.length > 0) {
+        hasSources = result.fact_check.verified_facts.some(fact => {
+            const source = fact.source || (typeof fact === 'string' ? null : fact.source);
+            return source && source !== 'Источник не указан' && source !== 'Источник не указан в анализе';
+        });
+    }
+    
+    return hasSources;
 }
 
 function displayAnalysisHistory() {
@@ -700,26 +768,71 @@ async function loadChatHistory() {
     displayChatHistory();
 }
 
+function markdownToHtml(md) {
+    if (!md) return '';
+    let html = md;
+    // code blocks
+    html = html.replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>');
+    // inline code
+    html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+    // bold
+    html = html.replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
+    html = html.replace(/__([^_]+)__/g, '<b>$1</b>');
+    // italic
+    html = html.replace(/\*([^*]+)\*/g, '<i>$1</i>');
+    html = html.replace(/_([^_]+)_/g, '<i>$1</i>');
+    // strikethrough
+    html = html.replace(/~~([^~]+)~~/g, '<del>$1</del>');
+    // underline (custom, not markdown standard)
+    html = html.replace(/==([^=]+)==/g, '<u>$1</u>');
+    // superscript
+    html = html.replace(/\^\(([^)]+)\)/g, '<sup>$1</sup>');
+    // subscript
+    html = html.replace(/~\(([^)]+)\)/g, '<sub>$1</sub>');
+    // blockquote
+    html = html.replace(/^>\s?(.*)$/gm, '<blockquote>$1</blockquote>');
+    // numbered lists
+    html = html.replace(/^(\d+)\. (.*)$/gm, '<li>$2</li>');
+    html = html.replace(/(<li>.*<\/li>)/gs, '<ol>$1</ol>');
+    // unordered lists
+    html = html.replace(/^\s*[-*+] (.*)$/gm, '<li>$1</li>');
+    html = html.replace(/(<li>.*<\/li>)/gs, '<ul>$1</ul>');
+    // links
+    html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>');
+    // images
+    html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img alt="$1" src="$2" style="max-width:100%;max-height:200px;">');
+    // headers
+    html = html.replace(/^###### (.*)$/gm, '<h6>$1</h6>');
+    html = html.replace(/^##### (.*)$/gm, '<h5>$1</h5>');
+    html = html.replace(/^#### (.*)$/gm, '<h4>$1</h4>');
+    html = html.replace(/^### (.*)$/gm, '<h3>$1</h3>');
+    html = html.replace(/^## (.*)$/gm, '<h2>$1</h2>');
+    html = html.replace(/^# (.*)$/gm, '<h1>$1</h1>');
+    // newlines to <br>
+    html = html.replace(/\n/g, '<br>');
+    return html;
+}
+
 function displayChatHistory() {
     const messagesDiv = document.getElementById('messages');
     messagesDiv.innerHTML = '';
-    
     if (chatHistory.length === 0) {
-        // Показываем приветственное сообщение если история пуста
         const welcomeMessage = document.createElement('div');
         welcomeMessage.className = 'message bot-message';
-        welcomeMessage.textContent = 'Привет! Я ваш AI помощник для проверки фактов. Чем могу помочь?';
+        welcomeMessage.innerHTML = 'Привет! Я ваш AI помощник для проверки фактов. Чем могу помочь?';
         messagesDiv.appendChild(welcomeMessage);
         return;
     }
-    
     chatHistory.forEach(item => {
         const messageDiv = document.createElement('div');
         messageDiv.className = `message ${item.role === 'user' ? 'user-message' : 'bot-message'}`;
-        messageDiv.textContent = item.content;
+        if (item.role === 'assistant') {
+            messageDiv.innerHTML = markdownToHtml(item.content);
+        } else {
+            messageDiv.textContent = item.content;
+        }
         messagesDiv.appendChild(messageDiv);
     });
-    
     messagesDiv.scrollTop = messagesDiv.scrollHeight;
 }
 
@@ -777,8 +890,14 @@ async function sendMessage() {
         });
         
         if (!response.ok) {
-            const errorText = await response.text();
-            throw new Error(`Ошибка API: ${response.status} - ${errorText}`);
+            let shortMsg = `Ошибка API: ${response.status}`;
+            try {
+                const err = await response.json();
+                if (response.status === 401 || (err.error && (err.error.type === 'authentication_error' || err.error.code === 'invalid_api_key'))) {
+                    shortMsg = 'Ошибка: Неверный API ключ';
+                }
+            } catch {}
+            throw new Error(shortMsg);
         }
         
         const data = await response.json();
