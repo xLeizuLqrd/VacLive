@@ -1,4 +1,63 @@
-// background.js - исправленный код с работающей отменой анализа
+chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
+  if (request.action === "sendChatMessage") {
+    try {
+      const apiKey = await getApiKey();
+      if (!apiKey) throw new Error('API ключ не найден. Сохраните ключ в настройках.');
+      const result = await chrome.storage.local.get(['chatHistory']);
+      let chatHistory = result.chatHistory || [];
+      const lastUserMsg = request.history.filter(m => m.role === 'user').slice(-1)[0];
+      if (lastUserMsg && (!chatHistory.length || chatHistory[chatHistory.length-1].content !== lastUserMsg.content || chatHistory[chatHistory.length-1].role !== 'user')) {
+        chatHistory.push(lastUserMsg);
+      }
+      const messages = [
+        { role: 'system', content: 'Ты - полезный AI помощник для проверки фактов и анализа новостей. Отвечай точно и информативно.' },
+        ...chatHistory.slice(-10)
+      ];
+      const response = await fetch('https://api.deepseek.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({
+          model: 'deepseek-chat',
+          messages: messages,
+          max_tokens: 1000,
+          temperature: 0.7
+        })
+      });
+      if (!response.ok) throw new Error('Ошибка API: ' + response.status);
+      const data = await response.json();
+      const botMessage = data.choices[0].message.content;
+      chatHistory.push({ role: 'assistant', content: botMessage });
+      if (chatHistory.length > 50) chatHistory = chatHistory.slice(-25);
+      await chrome.storage.local.set({ chatHistory });
+      chrome.notifications.create('chat_' + Date.now(), {
+        type: 'basic',
+        iconUrl: 'pictures/icon48.png',
+        title: 'VacLive - Ответ в чате',
+        message: botMessage.length > 100 ? 'Ответ получен' : botMessage,
+        priority: 1
+      });
+      sendResponse({ success: true });
+    } catch (error) {
+      sendResponse({ success: false, error: error.message });
+    }
+    return true;
+  }
+});
+
+chrome.notifications.onClicked.addListener(async (notificationId) => {
+  if (notificationId.startsWith('chat_')) {
+    chrome.action.openPopup();
+    chrome.notifications.clear(notificationId);
+  }
+});
+
+async function getApiKey() {
+  const result = await chrome.storage.local.get(['deepseekApiKey']);
+  return result.deepseekApiKey;
+}
 
 chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.create({
@@ -16,22 +75,16 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
   }
 });
 
-// Глобальные переменные для отслеживания анализов
 let activeAnalyses = new Map();
 
-// Обработка сообщений от popup
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === "startAnalysis") {
-      // Генерируем уникальный ID для анализа
       const analysisId = request.analysisId || 'analysis_' + Date.now();
       
-      // Немедленный ответ что запрос принят
       sendResponse({ success: true, message: "Анализ запущен", analysisId: analysisId });
       
-      // Создаем объект для контроля анализа
       const controller = new AbortController();
       
-      // Добавляем в активные анализы
       activeAnalyses.set(analysisId, {
           status: 'processing',
           startTime: Date.now(),
@@ -43,30 +96,26 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
           signal: controller.signal
       });
       
-      // Запускаем анализ асинхронно
       startBackgroundAnalysis(request.text, request.title, analysisId, controller.signal)
           .then(result => {
-              // Проверяем не был ли отменен анализ
               if (controller.signal.aborted) {
                   console.log('Анализ был отменен:', analysisId);
                   return;
               }
               
-              // Отправляем результат всем открытым popup окнам
               chrome.runtime.sendMessage({
                   action: "analysisComplete",
                   result: result,
                   analysisId: analysisId
               }).catch(error => console.log('Popup закрыт, результат не отправлен'));
               
-              // Показываем уведомление
               showAnalysisNotification(analysisId, result.verdict);
               
-              // Удаляем из активных анализов после завершения
+              chrome.storage.local.set({ lastAnalysisResult: result });
+              
               activeAnalyses.delete(analysisId);
           })
           .catch(error => {
-              // Проверяем не был ли отменен анализ
               if (controller.signal.aborted) {
                   console.log('Анализ отменен:', analysisId);
                   return;
@@ -79,11 +128,10 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                   analysisId: analysisId
               }).catch(error => console.log('Popup закрыт, ошибка не отправлена'));
               
-              // Удаляем из активных анализов при ошибке
               activeAnalyses.delete(analysisId);
           });
       
-      return true; // Сообщаем, что ответ будет асинхронным
+      return true;
   }
   
   if (request.action === "getAnalysisStatus") {
@@ -98,13 +146,11 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === "cancelAnalysis") {
       const analysis = activeAnalyses.get(request.analysisId);
       if (analysis) {
-          // Отменяем запрос
           if (analysis.controller) {
               analysis.controller.abort();
               console.log('Анализ отменен:', request.analysisId);
           }
           
-          // Удаляем из активных анализов
           activeAnalyses.delete(request.analysisId);
           
           sendResponse({ success: true, message: "Анализ отменен" });
@@ -115,17 +161,14 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
 });
 
-// Функция анализа в фоновом режиме с поддержкой отмены
 async function startBackgroundAnalysis(text, title, analysisId, signal) {
   console.log('Запуск анализа:', { analysisId, textLength: text.length });
   
-  // Проверяем не отменен ли анализ
   if (signal.aborted) {
       throw new Error('Анализ отменен');
   }
   
   try {
-      // Отправляем начальный прогресс
       await sendProgress(analysisId, 'Подготовка анализа...', 10);
       
       const apiKey = await getApiKey();
@@ -133,15 +176,12 @@ async function startBackgroundAnalysis(text, title, analysisId, signal) {
           throw new Error('API ключ не найден. Сохраните ключ в настройках.');
       }
       
-      // Проверяем не отменен ли анализ
       if (signal.aborted) {
           throw new Error('Анализ отменен');
       }
       
-      // Отправляем прогресс получения ключа
       await sendProgress(analysisId, 'Проверка API ключа...', 20);
       
-      // УЛУЧШЕННЫЙ ПРОМПТ с требованием указывать источники
       const prompt = `Проанализируй этот текст новости и дай оценку достоверности. ОБЯЗАТЕЛЬНО указывай конкретные источники для каждого факта. Ответь ТОЛЬКО в формате JSON:
 
 {
@@ -185,17 +225,14 @@ async function startBackgroundAnalysis(text, title, analysisId, signal) {
 
 Текст для анализа: ${text.substring(0, 4000)}`;
       
-      // Проверяем не отменен ли анализ
       if (signal.aborted) {
           throw new Error('Анализ отменен');
       }
       
-      // Отправляем прогресс перед запросом к API
       await sendProgress(analysisId, 'Отправка запроса к AI...', 40);
       
       console.log('Отправка запроса к API...');
       
-      // Создаем таймаут для отмены
       const timeoutPromise = new Promise((_, reject) => {
           setTimeout(() => reject(new Error('Таймаут запроса')), 30000);
       });
@@ -212,7 +249,7 @@ async function startBackgroundAnalysis(text, title, analysisId, signal) {
               max_tokens: 2000,
               temperature: 0.3
           }),
-          signal: signal // Передаем signal для отмены
+          signal: signal
       });
       
       const response = await Promise.race([fetchPromise, timeoutPromise]);
@@ -225,12 +262,10 @@ async function startBackgroundAnalysis(text, title, analysisId, signal) {
           throw new Error(`Ошибка API: ${response.status}`);
       }
       
-      // Проверяем не отменен ли анализ
       if (signal.aborted) {
           throw new Error('Анализ отменен');
       }
       
-      // Отправляем прогресс обработки ответа
       await sendProgress(analysisId, 'Обработка результатов...', 80);
       
       const data = await response.json();
@@ -240,7 +275,6 @@ async function startBackgroundAnalysis(text, title, analysisId, signal) {
           throw new Error('Неверный формат ответа от API');
       }
       
-      // Проверяем не отменен ли анализ
       if (signal.aborted) {
           throw new Error('Анализ отменен');
       }
@@ -248,10 +282,8 @@ async function startBackgroundAnalysis(text, title, analysisId, signal) {
       const result = parseAnalysisResult(data.choices[0].message.content);
       console.log('Результат анализа:', result);
       
-      // Финальный прогресс
       await sendProgress(analysisId, 'Завершение анализа...', 100);
       
-      // Сохраняем в историю
       await saveAnalysisToHistory({
           title: title,
           text: text,
@@ -261,7 +293,6 @@ async function startBackgroundAnalysis(text, title, analysisId, signal) {
       return result;
       
   } catch (error) {
-      // Если ошибка из-за отмены, не логируем как ошибку
       if (error.name === 'AbortError' || error.message === 'Анализ отменен') {
           console.log('Анализ отменен пользователем:', analysisId);
           throw error;
@@ -272,9 +303,7 @@ async function startBackgroundAnalysis(text, title, analysisId, signal) {
   }
 }
 
-// Функция для отправки прогресса
 async function sendProgress(analysisId, message, progress) {
-  // Проверяем существует ли еще анализ (не был ли отменен)
   const analysis = activeAnalyses.get(analysisId);
   if (!analysis) {
       console.log('Анализ не найден, пропускаем прогресс:', analysisId);
@@ -283,12 +312,10 @@ async function sendProgress(analysisId, message, progress) {
   
   console.log(`Прогресс [${analysisId}]: ${message} (${progress}%)`);
   
-  // Обновляем статус в активных анализах
   analysis.progress = progress;
   analysis.message = message;
   activeAnalyses.set(analysisId, analysis);
   
-  // Отправляем сообщение в popup
   try {
       await chrome.runtime.sendMessage({
           action: "analysisProgress",
@@ -297,12 +324,10 @@ async function sendProgress(analysisId, message, progress) {
           progress: progress
       });
   } catch (error) {
-      // Popup может быть закрыт - это нормально
       console.log('Прогресс не отправлен (popup закрыт)');
   }
 }
 
-// Вспомогательные функции
 async function getApiKey() {
   const result = await chrome.storage.local.get(['deepseekApiKey']);
   return result.deepseekApiKey;
@@ -312,17 +337,14 @@ function parseAnalysisResult(result) {
   console.log('Парсинг результата:', result);
   
   try {
-    // Пытаемся найти JSON в ответе
     const jsonMatch = result.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
       const parsed = JSON.parse(jsonMatch[0]);
       console.log('Успешно распарсен JSON:', parsed);
       
-      // Дополнительная обработка для обеспечения наличия источников
       return enhanceAnalysisResult(parsed);
     }
     
-    // Если JSON не найден, создаем базовую структуру с указанием проблемы
     console.log('JSON не найден, создаем базовый ответ');
     return {
       verdict: "Частично правдивые",
@@ -367,9 +389,7 @@ function parseAnalysisResult(result) {
   }
 }
 
-// Новая функция для улучшения результатов анализа
 function enhanceAnalysisResult(result) {
-  // Обеспечиваем наличие источников для проверенных фактов
   if (result.fact_check && result.fact_check.verified_facts) {
     result.fact_check.verified_facts = result.fact_check.verified_facts.map((fact, index) => {
       if (typeof fact === 'string') {
@@ -385,7 +405,6 @@ function enhanceAnalysisResult(result) {
     });
   }
   
-  // Обеспечиваем наличие источников для ложных утверждений
   if (result.fact_check && result.fact_check.false_claims) {
     result.fact_check.false_claims = result.fact_check.false_claims.map((claim, index) => {
       if (typeof claim === 'string') {
@@ -401,7 +420,6 @@ function enhanceAnalysisResult(result) {
     });
   }
   
-  // Обеспечиваем наличие причин для непроверенных утверждений
   if (result.fact_check && result.fact_check.unverified_claims) {
     result.fact_check.unverified_claims = result.fact_check.unverified_claims.map((claim, index) => {
       if (typeof claim === 'string') {
@@ -441,7 +459,6 @@ function showAnalysisNotification(analysisId, verdict) {
   });
 }
 
-// Обработка кликов по уведомлениям
 chrome.notifications.onClicked.addListener(async (notificationId) => {
   if (notificationId.startsWith('analysis_')) {
     chrome.action.openPopup();
@@ -449,7 +466,6 @@ chrome.notifications.onClicked.addListener(async (notificationId) => {
   }
 });
 
-// Функция сохранения анализа в историю
 async function saveAnalysisToHistory(analysisData) {
   try {
       const result = await chrome.storage.local.get(['analysisHistory']);
@@ -475,7 +491,6 @@ async function saveAnalysisToHistory(analysisData) {
   }
 }
 
-// Очистка старых анализов при запуске
 chrome.runtime.onStartup.addListener(() => {
   activeAnalyses.clear();
 });

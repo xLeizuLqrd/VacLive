@@ -68,7 +68,6 @@
             gap: 16px;
         }
 
-        /* Header */
         .header {
             display: flex;
             justify-content: space-between;
@@ -173,7 +172,6 @@
             border-color: var(--primary);
         }
 
-        /* Tabs */
         .tabs-container {
             background: var(--surface);
             border-radius: var(--radius-lg);
@@ -240,7 +238,6 @@
             display: flex;
         }
 
-        /* API Section */
         .api-section {
             background: var(--surface);
             border: 1px solid var(--border);
@@ -313,7 +310,6 @@
             border-color: var(--primary);
         }
 
-        /* Chat & Analyzer Containers */
         .content-container {
             flex: 1;
             display: flex;
@@ -408,7 +404,6 @@
             transform: scale(1.05);
         }
 
-        /* Analyzer Specific */
         .analyze-textarea {
             flex: 1;
             padding: 16px;
@@ -431,7 +426,6 @@
             margin-bottom: 16px;
         }
 
-        /* Analysis Results */
         .analysis-result {
             padding: -10px;
             display: flex;
@@ -528,7 +522,6 @@
             font-weight: 500;
         }
 
-        /* History */
         .history-item {
             padding: 16px;
             border-bottom: 1px solid var(--border);
@@ -546,7 +539,6 @@
             border-bottom: none;
         }
 
-        /* Loading & Messages */
         .loading {
             display: inline-block;
             width: 16px;
@@ -581,7 +573,6 @@
             font-weight: 500;
         }
 
-        /* Scrollbar */
         ::-webkit-scrollbar {
             width: 6px;
         }
@@ -599,7 +590,6 @@
             background: var(--text-tertiary);
         }
 
-        /* Icons */
         .icon {
             width: 20px;
             height: 20px;
@@ -751,24 +741,6 @@
     </div>
 
     <script src="popup.js"></script>
-    <script>
-        document.addEventListener('DOMContentLoaded', function () {
-            const themeToggle = document.getElementById('themeToggle');
-            const themeIcon = document.getElementById('themeIcon');
-            const themeText = document.getElementById('themeText');
-
-            function updateThemeIcon() {
-                const isDark = document.body.getAttribute('data-theme') === 'dark';
-                themeIcon.src = isDark ? 'pictures/moon32.png' : 'pictures/sun32.png';
-                themeText.textContent = isDark ? 'Тёмная' : 'Светлая';
-            }
-
-            updateThemeIcon();
-            themeToggle.addEventListener('click', function () {
-                setTimeout(updateThemeIcon, 100);
-            });
-        });
-    </script>
 </body>
 
 </html>
