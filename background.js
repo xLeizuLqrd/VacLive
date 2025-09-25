@@ -32,6 +32,7 @@ chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
       chatHistory.push({ role: 'assistant', content: botMessage });
       if (chatHistory.length > 50) chatHistory = chatHistory.slice(-25);
       await chrome.storage.local.set({ chatHistory });
+      chrome.runtime.sendMessage({ action: 'chatBotResponse' });
       chrome.notifications.create('chat_' + Date.now(), {
         type: 'basic',
         iconUrl: 'pictures/icon48.png',
@@ -50,7 +51,10 @@ chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
 chrome.notifications.onClicked.addListener(async (notificationId) => {
   if (notificationId.startsWith('chat_')) {
     chrome.action.openPopup();
-    chrome.notifications.clear(notificationId);
+    setTimeout(() => {
+      chrome.runtime.sendMessage({ action: 'showChatFromNotification' });
+      chrome.notifications.clear(notificationId);
+    }, 300);
   }
 });
 
@@ -69,9 +73,24 @@ chrome.runtime.onInstalled.addListener(() => {
 
 chrome.contextMenus.onClicked.addListener((info, tab) => {
   if (info.menuItemId === "analyse-selection" && info.selectionText) {
-      chrome.storage.local.set({ analysedText: info.selectionText }, () => {
-          chrome.action.openPopup();
-      });
+    chrome.storage.local.set({ analysedText: info.selectionText }, async () => {
+      try {
+        const windows = await chrome.windows.getAll({ populate: false });
+        if (windows && windows.length > 0) {
+          await chrome.action.openPopup();
+          setTimeout(() => {
+            try {
+              chrome.runtime.sendMessage({ action: 'showAnalyzerFromContextMenu' });
+            } catch (e) {
+            }
+          }, 400);
+        } else {
+          console.warn('Нет активного окна браузера для открытия popup');
+        }
+      } catch (e) {
+        console.error('Ошибка открытия popup:', e);
+      }
+    });
   }
 });
 
@@ -97,39 +116,52 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       });
       
       startBackgroundAnalysis(request.text, request.title, analysisId, controller.signal)
-          .then(result => {
-              if (controller.signal.aborted) {
-                  console.log('Анализ был отменен:', analysisId);
-                  return;
-              }
-              
-              chrome.runtime.sendMessage({
-                  action: "analysisComplete",
-                  result: result,
-                  analysisId: analysisId
-              }).catch(error => console.log('Popup закрыт, результат не отправлен'));
-              
-              showAnalysisNotification(analysisId, result.verdict);
-              
-              chrome.storage.local.set({ lastAnalysisResult: result });
-              
-              activeAnalyses.delete(analysisId);
-          })
-          .catch(error => {
-              if (controller.signal.aborted) {
-                  console.log('Анализ отменен:', analysisId);
-                  return;
-              }
-              
-              console.error('Ошибка анализа:', error);
-              chrome.runtime.sendMessage({
-                  action: "analysisError",
-                  error: error.message,
-                  analysisId: analysisId
-              }).catch(error => console.log('Popup закрыт, ошибка не отправлена'));
-              
-              activeAnalyses.delete(analysisId);
+      .then(result => {
+        if (controller.signal.aborted) {
+          console.log('Анализ был отменен:', analysisId);
+          return;
+        }
+        try {
+          chrome.runtime.sendMessage({
+            action: "analysisComplete",
+            result: result,
+            analysisId: analysisId
           });
+        } catch (error) {
+          console.log('Popup закрыт, результат не отправлен');
+        }
+        showAnalysisNotification(analysisId, result.verdict);
+        chrome.storage.local.set({ lastAnalysisResult: result });
+        activeAnalyses.delete(analysisId);
+      })
+      .catch(error => {
+        if (controller.signal.aborted) {
+          console.log('Анализ отменен:', analysisId);
+          return;
+        }
+        let friendlyError = error.message;
+        if (friendlyError && (friendlyError.includes('не найден') || friendlyError.includes('прерван'))) {
+          friendlyError = 'Сервер перегружен или временно недоступен. Пожалуйста, попробуйте позже.';
+        }
+        if (chrome.extension.getViews({type:'popup'}).length === 0) {
+          chrome.notifications.create('analysis_error_' + Date.now(), {
+            type: 'basic',
+            iconUrl: 'pictures/icon48.png',
+            title: 'VacLive — Ошибка анализа',
+            message: friendlyError
+          });
+        }
+        try {
+          chrome.runtime.sendMessage({
+            action: "analysisError",
+            error: friendlyError,
+            analysisId: analysisId
+          });
+        } catch (error) {
+          console.log('Popup закрыт, ошибка не отправлена');
+        }
+        activeAnalyses.delete(analysisId);
+      });
       
       return true;
   }
@@ -298,8 +330,12 @@ async function startBackgroundAnalysis(text, title, analysisId, signal) {
           throw error;
       }
       
+    if (error.message && error.message.includes('API ключ не найден')) {
+      console.warn('Ошибка в анализе: API ключ не найден. Сохраните ключ в настройках.');
+    } else {
       console.error('Ошибка в анализе:', error);
-      throw error;
+    }
+    throw error;
   }
 }
 
@@ -462,7 +498,13 @@ function showAnalysisNotification(analysisId, verdict) {
 chrome.notifications.onClicked.addListener(async (notificationId) => {
   if (notificationId.startsWith('analysis_')) {
     chrome.action.openPopup();
-    chrome.notifications.clear(notificationId);
+    setTimeout(() => {
+      chrome.runtime.sendMessage({
+        action: 'showAnalysisFromNotification',
+        analysisId: notificationId
+      });
+      chrome.notifications.clear(notificationId);
+    }, 300);
   }
 });
 

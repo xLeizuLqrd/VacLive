@@ -15,6 +15,32 @@
             box-sizing: border-box;
         }
 
+        #history-tab .content-container {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            min-height: 400px;
+        }
+        #historyList {
+            flex: 1 1 auto;
+            min-height: 0;
+            max-height: 340px;
+            overflow-y: auto;
+        }
+        #history-tab .input-container {
+            position: static;
+            margin-top: auto;
+            background: var(--surface);
+            z-index: 2;
+            justify-content: center;
+            gap: 12px;
+        }
+        #historyReportContainer {
+            max-height: 340px;
+            overflow-y: auto;
+        }
+        #historyFullReport {
+        }
         :root {
             --primary: #2563eb;
             --primary-dark: #1d4ed8;
@@ -405,7 +431,7 @@
         }
 
         .analyze-textarea {
-            flex: 1;
+            flex: 1 1 auto;
             padding: 16px;
             border: 1px solid var(--border);
             border-radius: var(--radius-md);
@@ -414,16 +440,17 @@
             font-size: 14px;
             resize: none;
             font-family: 'Inter', sans-serif;
-            margin: 16px;
-            min-height: 120px;
+            margin: 16px 16px 0 16px;
+            min-height: 180px;
+            max-height: 300px;
             line-height: 1.5;
         }
 
         .analyze-buttons {
             display: flex;
             gap: 8px;
-            padding: 0 16px;
-            margin-bottom: 16px;
+            padding: 0 16px 16px 16px;
+            margin-top: auto;
         }
 
         .analysis-result {
@@ -693,11 +720,10 @@
 
         <!-- Вкладка анализатора -->
         <div id="analyzer-tab" class="tab-content">
-            <div class="content-container">
+            <div class="content-container" style="display: flex; flex-direction: column; height: 100%; min-height: 400px;">
                 <textarea class="analyze-textarea" id="analyzeText"
                     placeholder="Вставьте текст новости для анализа или используйте кнопки ниже..."></textarea>
-
-                <div class="analyze-buttons">
+                <div class="analyze-buttons" style="margin-top: auto;">
                     <button class="btn btn-primary" id="analyzePage">
                         <img src="pictures/eye32.png" alt="Анализ страницы" class="icon">
                         Анализ страницы
@@ -707,24 +733,24 @@
                         Анализ текста
                     </button>
                 </div>
-
-                <div class="messages-container">
-                    <div class="analysis-result" id="analysisResult">
-                        <div class="message bot-message">
-                            Результаты проверки фактов появятся здесь...
-                        </div>
-                    </div>
-                </div>
             </div>
         </div>
 
         <!-- Вкладка истории -->
         <div id="history-tab" class="tab-content">
             <div class="content-container">
-                <div class="messages-container" id="historyList">
-                    <div class="message bot-message">
-                        История проверок будет отображаться здесь...
+                <div id="historyListContainer">
+                    <div class="messages-container" id="historyList">
+                        <div class="message bot-message">
+                            История проверок будет отображаться здесь...
+                        </div>
                     </div>
+                </div>
+                <div id="historyReportContainer" style="display:none;">
+                    <button class="btn btn-secondary" id="backToHistory" style="margin: 16px auto 0 16px; display: block;">
+                        ← Назад к истории
+                    </button>
+                    <div class="messages-container" id="historyFullReport"></div>
                 </div>
                 <div class="input-container" style="justify-content: center; gap: 12px;">
                     <button class="btn btn-secondary" id="exportHistory" style="flex: none;">
