@@ -19,6 +19,7 @@
             display: flex;
             flex-direction: column;
             height: 100%;
+            min-height: 400px;
         }
         #historyList {
             flex: 1 1 auto;
@@ -27,8 +28,8 @@
             overflow-y: auto;
         }
         #history-tab .input-container {
-            position: sticky;
-            bottom: 0;
+            position: static;
+            margin-top: auto;
             background: var(--surface);
             z-index: 2;
             justify-content: center;
@@ -430,7 +431,7 @@
         }
 
         .analyze-textarea {
-            flex: 1;
+            flex: 1 1 auto;
             padding: 16px;
             border: 1px solid var(--border);
             border-radius: var(--radius-md);
@@ -439,16 +440,17 @@
             font-size: 14px;
             resize: none;
             font-family: 'Inter', sans-serif;
-            margin: 16px;
-            min-height: 120px;
+            margin: 16px 16px 0 16px;
+            min-height: 180px;
+            max-height: 300px;
             line-height: 1.5;
         }
 
         .analyze-buttons {
             display: flex;
             gap: 8px;
-            padding: 0 16px;
-            margin-bottom: 16px;
+            padding: 0 16px 16px 16px;
+            margin-top: auto;
         }
 
         .analysis-result {
@@ -718,11 +720,10 @@
 
         <!-- Вкладка анализатора -->
         <div id="analyzer-tab" class="tab-content">
-            <div class="content-container">
+            <div class="content-container" style="display: flex; flex-direction: column; height: 100%; min-height: 400px;">
                 <textarea class="analyze-textarea" id="analyzeText"
                     placeholder="Вставьте текст новости для анализа или используйте кнопки ниже..."></textarea>
-
-                <div class="analyze-buttons">
+                <div class="analyze-buttons" style="margin-top: auto;">
                     <button class="btn btn-primary" id="analyzePage">
                         <img src="pictures/eye32.png" alt="Анализ страницы" class="icon">
                         Анализ страницы
@@ -731,14 +732,6 @@
                         <img src="pictures/text32.png" alt="Анализ текста" class="icon">
                         Анализ текста
                     </button>
-                </div>
-
-                <div class="messages-container">
-                    <div class="analysis-result" id="analysisResult">
-                        <div class="message bot-message">
-                            Результаты проверки фактов появятся здесь...
-                        </div>
-                    </div>
                 </div>
             </div>
         </div>

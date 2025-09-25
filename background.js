@@ -82,7 +82,6 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
             try {
               chrome.runtime.sendMessage({ action: 'showAnalyzerFromContextMenu' });
             } catch (e) {
-              // popup неактивен, игнорируем
             }
           }, 400);
         } else {
@@ -140,15 +139,22 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
           console.log('Анализ отменен:', analysisId);
           return;
         }
-      if (error.message && error.message.includes('API ключ не найден')) {
-        console.warn('Ошибка анализа: API ключ не найден. Сохраните ключ в настройках.');
-      } else {
-        console.error('Ошибка анализа:', error);
-      }
+        let friendlyError = error.message;
+        if (friendlyError && (friendlyError.includes('не найден') || friendlyError.includes('прерван'))) {
+          friendlyError = 'Сервер перегружен или временно недоступен. Пожалуйста, попробуйте позже.';
+        }
+        if (chrome.extension.getViews({type:'popup'}).length === 0) {
+          chrome.notifications.create('analysis_error_' + Date.now(), {
+            type: 'basic',
+            iconUrl: 'pictures/icon48.png',
+            title: 'VacLive — Ошибка анализа',
+            message: friendlyError
+          });
+        }
         try {
           chrome.runtime.sendMessage({
             action: "analysisError",
-            error: error.message,
+            error: friendlyError,
             analysisId: analysisId
           });
         } catch (error) {
