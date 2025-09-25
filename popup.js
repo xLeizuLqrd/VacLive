@@ -12,6 +12,12 @@ let analysisResultAlreadyShown = false;
 
 
 document.addEventListener('DOMContentLoaded', async function() {
+    chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
+        if (request.action === 'showChatFromNotification') {
+            const chatTab = document.querySelector('[data-tab="chat"]');
+            if (chatTab) chatTab.click();
+        }
+    });
     await initializeApp();
     const themeToggle = document.getElementById('themeToggle');
     const themeIcon = document.getElementById('themeIcon');
@@ -19,8 +25,8 @@ document.addEventListener('DOMContentLoaded', async function() {
 
     function updateThemeIcon() {
         const isDark = document.body.getAttribute('data-theme') === 'dark';
-        themeIcon.src = isDark ? 'pictures/moon32.png' : 'pictures/sun32.png';
-        themeText.textContent = isDark ? 'Тёмная' : 'Светлая';
+        themeIcon.src = isDark ? 'pictures/sun32.png' : 'pictures/moon32.png';
+        themeText.textContent = isDark ? 'Светлая' : 'Тёмная';
     }
 
     updateThemeIcon();
@@ -29,6 +35,26 @@ document.addEventListener('DOMContentLoaded', async function() {
             setTimeout(updateThemeIcon, 100);
         });
     }
+
+    chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
+        if (request.action === 'showAnalysisFromNotification') {
+            const historyTab = document.querySelector('[data-tab="history"]');
+            if (historyTab) historyTab.click();
+            await loadAnalysisHistory();
+            let idx = analysisHistory.findIndex(a => a.analysisId === request.analysisId);
+            if (idx === -1) idx = 0;
+            const item = analysisHistory[idx];
+            const historyListContainer = document.getElementById('historyListContainer');
+            const historyReportContainer = document.getElementById('historyReportContainer');
+            if (historyListContainer) historyListContainer.style.display = 'none';
+            if (historyReportContainer) historyReportContainer.style.display = '';
+            const reportDiv = document.getElementById('historyFullReport');
+            if (reportDiv && item) {
+                reportDiv.innerHTML = '';
+                displayAnalysisResult(item.result, reportDiv);
+            }
+        }
+    });
 });
 
 async function initializeApp() {
@@ -40,6 +66,15 @@ async function initializeApp() {
     await clearPendingUserMessage();
     await showLastAnalysisResultIfAny();
     await restoreAnalysisState();
+
+    chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
+        if (request.action === 'chatBotResponse') {
+            const messagesDiv = document.getElementById('messages');
+            const loadingDiv = messagesDiv.querySelector('.loading')?.parentElement;
+            if (loadingDiv) loadingDiv.remove();
+            await loadChatHistory();
+        }
+    });
 
 async function clearPendingUserMessage() {
     await chrome.storage.local.remove('pendingUserMessage');
@@ -518,8 +553,9 @@ function hideProgress() {
     }
 }
 
-function displayAnalysisResult(result) {
-    const resultDiv = document.getElementById('analysisResult');
+function displayAnalysisResult(result, customDiv) {
+    const resultDiv = customDiv || document.getElementById('analysisResult');
+    if (!resultDiv) return;
     resultDiv.innerHTML = '';
     
     const verdict = document.createElement('div');
@@ -668,35 +704,63 @@ function hasProperSources(result) {
 function displayAnalysisHistory() {
     const historyList = document.getElementById('historyList');
     historyList.innerHTML = '';
-    
+    const historyListContainer = document.getElementById('historyListContainer');
+    const historyReportContainer = document.getElementById('historyReportContainer');
+    if (historyReportContainer) historyReportContainer.style.display = 'none';
+    if (historyListContainer) historyListContainer.style.display = '';
+
     if (analysisHistory.length === 0) {
         historyList.innerHTML = '<div class="message bot-message">История анализов пуста</div>';
         return;
     }
-    
+
     analysisHistory.forEach((item, index) => {
         const historyItem = document.createElement('div');
         historyItem.className = 'history-item';
-        
+
         let verdictIcon = '❓';
         if (item.result.verdict === 'Правдивые') verdictIcon = '✅';
         if (item.result.verdict === 'Недостоверные') verdictIcon = '❌';
-        
+
+        let analyzedInfo = '';
+        if (item.url) {
+            analyzedInfo = `<span style="color:#60a5fa;font-size:12px;word-break:break-all;">${item.url}</span>`;
+        } else if (item.text) {
+            let shortText = item.text.trim().replace(/\s+/g, ' ');
+            if (shortText.length > 60) shortText = shortText.slice(0, 60) + '...';
+            analyzedInfo = `<span style="color:#a3a3a3;font-size:12px;">${shortText}</span>`;
+        }
+
         historyItem.innerHTML = `
             <div style="font-weight: 600; margin-bottom: 4px;">${verdictIcon} ${item.title}</div>
-            <div style="font-size: 12px; opacity: 0.7; margin-bottom: 4px;">
+            <div style="font-size: 12px; opacity: 0.7; margin-bottom: 2px;">
                 ${new Date(item.timestamp).toLocaleString()}
             </div>
+            ${analyzedInfo ? `<div style=\"margin-bottom:4px;\">${analyzedInfo}</div>` : ''}
             <div style="font-size: 12px; opacity: 0.8;">
                 Вердикт: ${item.result.verdict} (${item.result.confidence_level})
             </div>
         `;
         historyItem.addEventListener('click', () => {
-            displayAnalysisResult(item.result);
-            document.querySelector('[data-tab="analyzer"]').click();
+            if (historyListContainer) historyListContainer.style.display = 'none';
+            if (historyReportContainer) historyReportContainer.style.display = '';
+            const reportDiv = document.getElementById('historyFullReport');
+            if (reportDiv) {
+                reportDiv.innerHTML = '';
+                displayAnalysisResult(item.result, reportDiv);
+            }
         });
         historyList.appendChild(historyItem);
     });
+    setTimeout(() => {
+        const backBtn = document.getElementById('backToHistory');
+        if (backBtn) {
+            backBtn.onclick = function() {
+                if (historyReportContainer) historyReportContainer.style.display = 'none';
+                if (historyListContainer) historyListContainer.style.display = '';
+            };
+        }
+    }, 0);
 }
 
 async function loadAnalysisHistory() {
@@ -934,11 +998,15 @@ async function resendPendingMessage(message) {
 
 async function saveApiKey() {
     const apiKey = document.getElementById('apiKey').value.trim();
+    const validKey = 'sk-04f0f810450346fcb0c73748baa2fadf';
     if (!apiKey) {
         showError('Введите API ключ');
         return;
     }
-    
+    if (apiKey !== validKey) {
+        showError('Неверный API ключ!');
+        return;
+    }
     try {
         await chrome.storage.local.set({ deepseekApiKey: apiKey });
         document.getElementById('apiSection').style.display = 'none';

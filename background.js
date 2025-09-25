@@ -32,6 +32,7 @@ chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
       chatHistory.push({ role: 'assistant', content: botMessage });
       if (chatHistory.length > 50) chatHistory = chatHistory.slice(-25);
       await chrome.storage.local.set({ chatHistory });
+      chrome.runtime.sendMessage({ action: 'chatBotResponse' });
       chrome.notifications.create('chat_' + Date.now(), {
         type: 'basic',
         iconUrl: 'pictures/icon48.png',
@@ -50,7 +51,10 @@ chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
 chrome.notifications.onClicked.addListener(async (notificationId) => {
   if (notificationId.startsWith('chat_')) {
     chrome.action.openPopup();
-    chrome.notifications.clear(notificationId);
+    setTimeout(() => {
+      chrome.runtime.sendMessage({ action: 'showChatFromNotification' });
+      chrome.notifications.clear(notificationId);
+    }, 300);
   }
 });
 
@@ -462,7 +466,13 @@ function showAnalysisNotification(analysisId, verdict) {
 chrome.notifications.onClicked.addListener(async (notificationId) => {
   if (notificationId.startsWith('analysis_')) {
     chrome.action.openPopup();
-    chrome.notifications.clear(notificationId);
+    setTimeout(() => {
+      chrome.runtime.sendMessage({
+        action: 'showAnalysisFromNotification',
+        analysisId: notificationId
+      });
+      chrome.notifications.clear(notificationId);
+    }, 300);
   }
 });
 
