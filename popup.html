@@ -15,6 +15,31 @@
             box-sizing: border-box;
         }
 
+        #history-tab .content-container {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+        }
+        #historyList {
+            flex: 1 1 auto;
+            min-height: 0;
+            max-height: 340px;
+            overflow-y: auto;
+        }
+        #history-tab .input-container {
+            position: sticky;
+            bottom: 0;
+            background: var(--surface);
+            z-index: 2;
+            justify-content: center;
+            gap: 12px;
+        }
+        #historyReportContainer {
+            max-height: 340px;
+            overflow-y: auto;
+        }
+        #historyFullReport {
+        }
         :root {
             --primary: #2563eb;
             --primary-dark: #1d4ed8;
@@ -721,10 +746,18 @@
         <!-- Вкладка истории -->
         <div id="history-tab" class="tab-content">
             <div class="content-container">
-                <div class="messages-container" id="historyList">
-                    <div class="message bot-message">
-                        История проверок будет отображаться здесь...
+                <div id="historyListContainer">
+                    <div class="messages-container" id="historyList">
+                        <div class="message bot-message">
+                            История проверок будет отображаться здесь...
+                        </div>
                     </div>
+                </div>
+                <div id="historyReportContainer" style="display:none;">
+                    <button class="btn btn-secondary" id="backToHistory" style="margin: 16px auto 0 16px; display: block;">
+                        ← Назад к истории
+                    </button>
+                    <div class="messages-container" id="historyFullReport"></div>
                 </div>
                 <div class="input-container" style="justify-content: center; gap: 12px;">
                     <button class="btn btn-secondary" id="exportHistory" style="flex: none;">

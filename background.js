@@ -32,7 +32,6 @@ chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
       chatHistory.push({ role: 'assistant', content: botMessage });
       if (chatHistory.length > 50) chatHistory = chatHistory.slice(-25);
       await chrome.storage.local.set({ chatHistory });
-      // Сообщаем popup.js о новом сообщении
       chrome.runtime.sendMessage({ action: 'chatBotResponse' });
       chrome.notifications.create('chat_' + Date.now(), {
         type: 'basic',
@@ -467,7 +466,6 @@ function showAnalysisNotification(analysisId, verdict) {
 chrome.notifications.onClicked.addListener(async (notificationId) => {
   if (notificationId.startsWith('analysis_')) {
     chrome.action.openPopup();
-    // Ждём, чтобы popup успел открыться
     setTimeout(() => {
       chrome.runtime.sendMessage({
         action: 'showAnalysisFromNotification',

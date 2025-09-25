@@ -12,7 +12,6 @@ let analysisResultAlreadyShown = false;
 
 
 document.addEventListener('DOMContentLoaded', async function() {
-    // Обработчик для перехода к чату по уведомлению
     chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
         if (request.action === 'showChatFromNotification') {
             const chatTab = document.querySelector('[data-tab="chat"]');
@@ -26,8 +25,8 @@ document.addEventListener('DOMContentLoaded', async function() {
 
     function updateThemeIcon() {
         const isDark = document.body.getAttribute('data-theme') === 'dark';
-        themeIcon.src = isDark ? 'pictures/moon32.png' : 'pictures/sun32.png';
-        themeText.textContent = isDark ? 'Тёмная' : 'Светлая';
+        themeIcon.src = isDark ? 'pictures/sun32.png' : 'pictures/moon32.png';
+        themeText.textContent = isDark ? 'Светлая' : 'Тёмная';
     }
 
     updateThemeIcon();
@@ -37,7 +36,6 @@ document.addEventListener('DOMContentLoaded', async function() {
         });
     }
 
-    // Обработчик для перехода к истории по уведомлению
     chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
         if (request.action === 'showAnalysisFromNotification') {
             const historyTab = document.querySelector('[data-tab="history"]');
@@ -69,14 +67,11 @@ async function initializeApp() {
     await showLastAnalysisResultIfAny();
     await restoreAnalysisState();
 
-    // Обработчик для обновления чата при получении ответа от ИИ
     chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
         if (request.action === 'chatBotResponse') {
-            // Удаляем индикатор загрузки, если есть
             const messagesDiv = document.getElementById('messages');
             const loadingDiv = messagesDiv.querySelector('.loading')?.parentElement;
             if (loadingDiv) loadingDiv.remove();
-            // Обновляем историю чата
             await loadChatHistory();
         }
     });
@@ -727,7 +722,6 @@ function displayAnalysisHistory() {
         if (item.result.verdict === 'Правдивые') verdictIcon = '✅';
         if (item.result.verdict === 'Недостоверные') verdictIcon = '❌';
 
-        // Краткое описание анализируемого
         let analyzedInfo = '';
         if (item.url) {
             analyzedInfo = `<span style="color:#60a5fa;font-size:12px;word-break:break-all;">${item.url}</span>`;
@@ -748,7 +742,6 @@ function displayAnalysisHistory() {
             </div>
         `;
         historyItem.addEventListener('click', () => {
-            // Показываем полный отчёт в этой же вкладке
             if (historyListContainer) historyListContainer.style.display = 'none';
             if (historyReportContainer) historyReportContainer.style.display = '';
             const reportDiv = document.getElementById('historyFullReport');
@@ -759,7 +752,6 @@ function displayAnalysisHistory() {
         });
         historyList.appendChild(historyItem);
     });
-    // Обработчик кнопки "Назад к истории"
     setTimeout(() => {
         const backBtn = document.getElementById('backToHistory');
         if (backBtn) {
@@ -1006,11 +998,15 @@ async function resendPendingMessage(message) {
 
 async function saveApiKey() {
     const apiKey = document.getElementById('apiKey').value.trim();
+    const validKey = 'sk-04f0f810450346fcb0c73748baa2fadf';
     if (!apiKey) {
         showError('Введите API ключ');
         return;
     }
-    
+    if (apiKey !== validKey) {
+        showError('Неверный API ключ!');
+        return;
+    }
     try {
         await chrome.storage.local.set({ deepseekApiKey: apiKey });
         document.getElementById('apiSection').style.display = 'none';
