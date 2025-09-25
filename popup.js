@@ -17,6 +17,16 @@ document.addEventListener('DOMContentLoaded', async function() {
             const chatTab = document.querySelector('[data-tab="chat"]');
             if (chatTab) chatTab.click();
         }
+        if (request.action === 'showAnalyzerFromContextMenu') {
+            const analyzerTab = document.querySelector('[data-tab="analyzer"]');
+            if (analyzerTab) analyzerTab.click();
+            // Вставляем выделенный текст
+            const result = await chrome.storage.local.get(['analysedText']);
+            if (result.analysedText && document.getElementById('analyzeText')) {
+                document.getElementById('analyzeText').value = result.analysedText;
+                await chrome.storage.local.remove('analysedText');
+            }
+        }
     });
     await initializeApp();
     const themeToggle = document.getElementById('themeToggle');
@@ -355,11 +365,14 @@ async function analyzeCurrentPage() {
         });
         
         if (results[0].result) {
-            const pageContent = results[0].result;
+            let pageContent = results[0].result;
+            // Ограничиваем длину текста до 4000 символов
+            const maxLength = 4000;
+            if (pageContent.length > maxLength) {
+                pageContent = pageContent.substring(0, maxLength) + '... [текст обрезан]';
+            }
             document.getElementById('analyzeText').value = pageContent;
-            
             showProgress('Подготовка к анализу...', 30);
-            
             await performAnalysis(pageContent, `Анализ страницы: ${tab.title}`);
         }
     } catch (error) {
@@ -905,6 +918,18 @@ async function sendMessage() {
     loadingDiv.innerHTML = '<div class="loading"></div> Думаю...';
     document.getElementById('messages').appendChild(loadingDiv);
     await chrome.storage.local.set({ pendingUserMessage: message });
+    // Проверяем API ключ перед отправкой
+    const apiKey = await getApiKey();
+    const validKey = 'sk-04f0f810450346fcb0c73748baa2fadf';
+    if (!apiKey || apiKey !== validKey) {
+        loadingDiv.remove();
+        chatHistory.pop();
+        const errorMessage = { role: 'assistant', content: '❌ Ошибка: Неверный API ключ. Введите корректный ключ в настройках.' };
+        chatHistory.push(errorMessage);
+        displayChatHistory();
+        await chrome.storage.local.remove(['pendingUserMessage', 'pendingBotResponse']);
+        return;
+    }
     try {
         await chrome.runtime.sendMessage({
             action: 'sendChatMessage',
