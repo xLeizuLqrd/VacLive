@@ -218,10 +218,33 @@ async function restoreAnalysisState() {
                 if (analyzerTab) analyzerTab.click();
             }
         }
+        // Проверяем статус анализа и всегда показываем прогресс, если processing
+        let isProcessing = false;
+        let progressMsg = '';
+        let progressVal = 0;
+        let analysisText = '';
         if (storedId && currentAnalysisStatus === 'processing') {
+            isProcessing = true;
             currentAnalysisId = storedId;
-            document.querySelector('[data-tab="analyzer"]').click();
+        } else if (result.currentAnalysis && result.currentAnalysis.status === 'processing') {
+            isProcessing = true;
+            currentAnalysisState = result.currentAnalysis;
+            currentAnalysisId = currentAnalysisState.analysisId;
+            progressMsg = currentAnalysisState.message || 'Восстановление анализа...';
+            progressVal = currentAnalysisState.progress || 0;
+            analysisText = currentAnalysisState.text || '';
+        }
+        if (isProcessing) {
+            const analyzerTab = document.querySelector('[data-tab="analyzer"]');
+            if (analyzerTab) analyzerTab.click();
+            if (analysisText && document.getElementById('analyzeText')) {
+                document.getElementById('analyzeText').value = analysisText;
+            }
             setupMessageHandler();
+            // Всегда показываем прогресс и кнопку отмены
+            if (progressMsg || progressVal) {
+                showProgress(progressMsg, progressVal);
+            }
             chrome.runtime.sendMessage({
                 action: "getAnalysisStatus",
                 analysisId: currentAnalysisId
@@ -244,18 +267,6 @@ async function restoreAnalysisState() {
                     handleAnalysisError('Анализ не найден или был прерван');
                 }
             });
-        } else if (result.currentAnalysis) {
-            currentAnalysisState = result.currentAnalysis;
-            currentAnalysisId = currentAnalysisState.analysisId;
-            if (currentAnalysisState.status === 'processing') {
-                showProgress(currentAnalysisState.message || 'Восстановление анализа...', currentAnalysisState.progress || 0);
-                if (currentAnalysisState.text) {
-                    document.getElementById('analyzeText').value = currentAnalysisState.text;
-                }
-                document.querySelector('[data-tab="analyzer"]').click();
-                setupMessageHandler();
-                checkAnalysisStatus();
-            }
         }
     } catch (error) {
         console.error('Ошибка восстановления состояния:', error);
