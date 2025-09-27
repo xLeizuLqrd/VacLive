@@ -39,8 +39,7 @@
             max-height: 340px;
             overflow-y: auto;
         }
-        #historyFullReport {
-        }
+        
         :root {
             --primary: #2563eb;
             --primary-dark: #1d4ed8;
@@ -646,6 +645,19 @@
                     <img id="themeIcon" src="pictures/sun32.png" alt="Тема" class="icon">
                     <span id="themeText">Тема</span>
                 </button>
+                <button class="theme-toggle" id="adminBtn" style="margin-left: 8px;">
+                    <!-- <img src="pictures/admin32.png" alt="Админ" class="icon"> -->
+                    Админ
+                </button>
+                <div id="adminPasswordModal" style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(0,0,0,0.4); z-index:10000; align-items:center; justify-content:center;">
+                    <div style="background:var(--card); padding:32px; border-radius:16px; box-shadow:0 8px 32px rgba(0,0,0,0.2); max-width:350px; width:90vw; display:flex; flex-direction:column; align-items:center;">
+                        <h2 style="margin-bottom:16px;">Вход в админ-панель</h2>
+                        <input id="adminPasswordInput" type="password" placeholder="Пароль" style="width:100%; padding:10px; font-size:16px; border-radius:8px; border:1px solid var(--border); margin-bottom:16px;">
+                        <div id="adminPasswordError" style="color:#ef4444; font-size:14px; margin-bottom:8px; display:none;">Неверный пароль</div>
+                        <button id="adminPasswordSubmit" style="background:#2563eb; color:white; border:none; border-radius:8px; padding:10px 24px; font-size:16px; cursor:pointer; font-weight:600;">Войти</button>
+                        <button id="adminPasswordCancel" style="background:#64748b; color:white; border:none; border-radius:8px; padding:8px 16px; font-size:14px; cursor:pointer; font-weight:500; margin-top:12px;">Отмена</button>
+                    </div>
+                </div>
                 <button id="menuBtn"
                     style="display:none; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 8px; cursor: pointer;">
                     <span
@@ -680,7 +692,7 @@
         </div>
 
         <div class="api-section" id="apiSection">
-            <input type="password" class="api-input" id="apiKey" placeholder="Введите ваш DeepSeek API ключ...">
+            <input type="password" class="api-input" id="apiKey" placeholder="Введите ваш API-ключ">
             <div class="button-group">
                 <button class="btn btn-primary" id="saveKey">
                     <img src="pictures/save32.png" alt="Сохранить" class="icon">
