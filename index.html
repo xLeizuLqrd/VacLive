@@ -1,0 +1,1078 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VacLive - Проверка достоверности новостей с помощью AI</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #2563eb;
+            --primary-dark: #1d4ed8;
+            --primary-light: #dbeafe;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --error: #ef4444;
+            --background: #ffffff;
+            --surface: #f8fafc;
+            --text-primary: #1e293b;
+            --text-secondary: #64748b;
+            --text-tertiary: #94a3b8;
+            --border: #e2e8f0;
+            --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            --radius-lg: 16px;
+            --radius-md: 12px;
+            --radius-sm: 8px;
+        }
+
+        [data-theme="dark"] {
+            --primary: #3b82f6;
+            --primary-dark: #2563eb;
+            --background: #0f172a;
+            --surface: #1e293b;
+            --text-primary: #f1f5f9;
+            --text-secondary: #cbd5e1;
+            --text-tertiary: #64748b;
+            --border: #475569;
+            --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--background);
+            color: var(--text-primary);
+            line-height: 1.6;
+            transition: all 0.3s ease;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+
+        /* Header */
+        header {
+            background: var(--surface);
+            padding: 20px 0;
+            position: fixed;
+            width: 100%;
+            top: 0;
+            z-index: 1000;
+            box-shadow: var(--shadow);
+        }
+
+        .header-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 24px;
+            font-weight: 700;
+        }
+
+        .logo img {
+            width: 40px;
+            height: 40px;
+            border-radius: 8px;
+        }
+
+        nav ul {
+            display: flex;
+            list-style: none;
+            gap: 30px;
+        }
+
+        nav a {
+            text-decoration: none;
+            color: var(--text-primary);
+            font-weight: 500;
+            transition: color 0.3s ease;
+        }
+
+        nav a:hover {
+            color: var(--primary);
+        }
+
+        .header-buttons {
+            display: flex;
+            gap: 12px;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border-radius: var(--radius-md);
+            font-weight: 600;
+            text-decoration: none;
+            transition: all 0.3s ease;
+            border: none;
+            cursor: pointer;
+            font-family: 'Inter', sans-serif;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-primary {
+            background: var(--primary);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: var(--primary-dark);
+            transform: translateY(-2px);
+        }
+
+        .btn-secondary {
+            background: var(--surface);
+            color: var(--text-primary);
+            border: 1px solid var(--border);
+        }
+
+        .btn-secondary:hover {
+            background: var(--background);
+            border-color: var(--primary);
+        }
+
+        /* Hero Section */
+        .hero {
+            padding: 160px 0 100px;
+            text-align: center;
+            background: linear-gradient(135deg, var(--surface) 0%, var(--background) 100%);
+        }
+
+        .hero h1 {
+            font-size: 48px;
+            font-weight: 700;
+            margin-bottom: 20px;
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .hero p {
+            font-size: 20px;
+            color: var(--text-secondary);
+            max-width: 700px;
+            margin: 0 auto 40px;
+        }
+
+        .hero-buttons {
+            display: flex;
+            gap: 16px;
+            justify-content: center;
+            margin-bottom: 60px;
+        }
+
+        .hero-image {
+            max-width: 800px;
+            margin: 0 auto;
+            border-radius: var(--radius-lg);
+            overflow: hidden;
+            box-shadow: var(--shadow);
+        }
+
+        .hero-image img {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+
+        /* Features Section */
+        .features {
+            padding: 100px 0;
+            background: var(--surface);
+        }
+
+        .section-title {
+            text-align: center;
+            margin-bottom: 60px;
+        }
+
+        .section-title h2 {
+            font-size: 36px;
+            font-weight: 700;
+            margin-bottom: 16px;
+        }
+
+        .section-title p {
+            font-size: 18px;
+            color: var(--text-secondary);
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 30px;
+        }
+
+        .feature-card {
+            background: var(--background);
+            padding: 30px;
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow);
+            text-align: center;
+            transition: transform 0.3s ease;
+        }
+
+        .feature-card:hover {
+            transform: translateY(-5px);
+        }
+
+        .feature-icon {
+            width: 60px;
+            height: 60px;
+            margin: 0 auto 20px;
+            background: var(--primary-light);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+        }
+
+        .feature-card h3 {
+            font-size: 20px;
+            font-weight: 600;
+            margin-bottom: 12px;
+        }
+
+        .feature-card p {
+            color: var(--text-secondary);
+        }
+
+        /* How It Works */
+        .how-it-works {
+            padding: 100px 0;
+        }
+
+        .steps {
+            display: flex;
+            justify-content: space-between;
+            position: relative;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        .steps::before {
+            content: '';
+            position: absolute;
+            top: 30px;
+            left: 50px;
+            right: 50px;
+            height: 2px;
+            background: var(--border);
+            z-index: 1;
+        }
+
+        .step {
+            text-align: center;
+            position: relative;
+            z-index: 2;
+            flex: 1;
+        }
+
+        .step-number {
+            width: 60px;
+            height: 60px;
+            background: var(--primary);
+            color: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            font-weight: 700;
+            margin: 0 auto 20px;
+        }
+
+        .step h3 {
+            margin-bottom: 10px;
+        }
+
+        .step p {
+            color: var(--text-secondary);
+        }
+
+        /* Pricing Section */
+        .pricing {
+            padding: 100px 0;
+            background: var(--surface);
+        }
+
+        .pricing-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 30px;
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+
+        .pricing-card {
+            background: var(--background);
+            border-radius: var(--radius-lg);
+            padding: 40px 30px;
+            box-shadow: var(--shadow);
+            text-align: center;
+            position: relative;
+            transition: transform 0.3s ease;
+        }
+
+        .pricing-card.featured {
+            border: 2px solid var(--primary);
+            transform: scale(1.05);
+        }
+
+        .pricing-card:hover {
+            transform: translateY(-5px);
+        }
+
+        .pricing-card.featured:hover {
+            transform: scale(1.05) translateY(-5px);
+        }
+
+        .pricing-badge {
+            position: absolute;
+            top: -10px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--primary);
+            color: white;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .pricing-card h3 {
+            font-size: 24px;
+            margin-bottom: 10px;
+        }
+
+        .price {
+            font-size: 48px;
+            font-weight: 700;
+            margin: 20px 0;
+        }
+
+        .price-period {
+            font-size: 16px;
+            color: var(--text-secondary);
+        }
+
+        .pricing-features {
+            list-style: none;
+            margin: 30px 0;
+            text-align: left;
+        }
+
+        .pricing-features li {
+            padding: 8px 0;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .pricing-features li::before {
+            content: '✓';
+            color: var(--success);
+            font-weight: bold;
+        }
+
+        /* FAQ Section */
+        .faq {
+            padding: 100px 0;
+        }
+
+        .faq-grid {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        .faq-item {
+            margin-bottom: 20px;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
+            overflow: hidden;
+        }
+
+        .faq-question {
+            padding: 20px;
+            background: var(--surface);
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .faq-answer {
+            padding: 0 20px;
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease, padding 0.3s ease;
+        }
+
+        .faq-item.active .faq-answer {
+            padding: 20px;
+            max-height: 500px;
+        }
+
+        /* Footer */
+        footer {
+            background: var(--surface);
+            padding: 60px 0 30px;
+            border-top: 1px solid var(--border);
+        }
+
+        .footer-content {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 40px;
+            margin-bottom: 40px;
+        }
+
+        .footer-column h3 {
+            margin-bottom: 20px;
+            font-size: 18px;
+        }
+
+        .footer-column ul {
+            list-style: none;
+        }
+
+        .footer-column ul li {
+            margin-bottom: 10px;
+        }
+
+        .footer-column a {
+            color: var(--text-secondary);
+            text-decoration: none;
+            transition: color 0.3s ease;
+        }
+
+        .footer-column a:hover {
+            color: var(--primary);
+        }
+
+        .footer-bottom {
+            text-align: center;
+            padding-top: 30px;
+            border-top: 1px solid var(--border);
+            color: var(--text-tertiary);
+            font-size: 14px;
+        }
+
+        /* Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 2000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-content {
+            background: var(--background);
+            padding: 40px;
+            border-radius: var(--radius-lg);
+            max-width: 500px;
+            width: 90%;
+            position: relative;
+        }
+
+        .close-modal {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            font-size: 24px;
+            cursor: pointer;
+            color: var(--text-tertiary);
+        }
+
+        .modal h2 {
+            margin-bottom: 20px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+        }
+
+        .form-group input,
+        .form-group select {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
+            font-family: 'Inter', sans-serif;
+        }
+
+        /* Theme Toggle */
+        .theme-toggle {
+            background: none;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
+            padding: 8px 12px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--text-primary);
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .hero h1 {
+                font-size: 36px;
+            }
+            
+            .hero-buttons {
+                flex-direction: column;
+                align-items: center;
+            }
+            
+            .steps {
+                flex-direction: column;
+                gap: 40px;
+            }
+            
+            .steps::before {
+                display: none;
+            }
+            
+            .pricing-card.featured {
+                transform: none;
+            }
+            
+            nav ul {
+                display: none;
+            }
+            
+            .mobile-menu-btn {
+                display: block;
+            }
+        }
+    </style>
+</head>
+<body data-theme="light">
+    <!-- Header -->
+    <header>
+        <div class="container">
+            <div class="header-content">
+                <div class="logo">
+                    <img src="pictures/icon48.png" alt="VacLive">
+                    <span>VacLive</span>
+                </div>
+                <nav>
+                    <ul>
+                        <li><a href="#features">Возможности</a></li>
+                        <li><a href="#how-it-works">Как работает</a></li>
+                        <li><a href="#pricing">Тарифы</a></li>
+                        <li><a href="#faq">Вопросы</a></li>
+                    </ul>
+                </nav>
+                <div class="header-buttons">
+                    <button class="theme-toggle" id="themeToggle">
+                        <span id="themeIcon">🌙</span>
+                        <span id="themeText">Тёмная тема</span>
+                    </button>
+                    <button class="btn btn-primary" id="loginBtn">Войти</button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Hero Section -->
+    <section class="hero">
+        <div class="container">
+            <h1>Проверяйте достоверность новостей с помощью AI</h1>
+            <p>VacLive анализирует статьи на наличие дезинформации, проверяет факты по надежным источникам и помогает отличить правду от вымысла.</p>
+            <div class="hero-buttons">
+                <button class="btn btn-primary" id="getStartedBtn">Начать бесплатно</button>
+                <button class="btn btn-secondary" id="watchDemoBtn">Смотреть демо</button>
+            </div>
+            <div class="hero-image">
+                <!-- Placeholder for screenshot -->
+                <div style="background: #e2e8f0; height: 400px; display: flex; align-items: center; justify-content: center; color: #64748b;">
+                    <div style="text-align: center;">
+                        <div style="font-size: 48px; margin-bottom: 16px;">📊</div>
+                        <div>Скриншот интерфейса VacLive</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Features Section -->
+    <section class="features" id="features">
+        <div class="container">
+            <div class="section-title">
+                <h2>Мощные возможности для проверки фактов</h2>
+                <p>VacLive использует передовые технологии AI для анализа новостей и выявления недостоверной информации</p>
+            </div>
+            <div class="features-grid">
+                <div class="feature-card">
+                    <div class="feature-icon">🔍</div>
+                    <h3>Глубокий анализ контента</h3>
+                    <p>AI тщательно анализирует текст новостей, выявляя противоречия, манипуляции и непроверенные утверждения.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">📊</div>
+                    <h3>Проверка по источникам</h3>
+                    <p>Автоматическая проверка фактов по надежным базам данных и официальным источникам информации.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">⚡</div>
+                    <h3>Мгновенные результаты</h3>
+                    <p>Получайте детальный отчет о достоверности новости всего за несколько секунд.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">💬</div>
+                    <h3>AI-помощник</h3>
+                    <p>Задавайте вопросы нашему AI-помощнику для получения дополнительной информации по теме.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">📈</div>
+                    <h3>Статистика и история</h3>
+                    <p>Отслеживайте свою активность и сохраняйте результаты проверок для будущего использования.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🔒</div>
+                    <h3>Конфиденциальность</h3>
+                    <p>Ваши данные защищены. Мы не храним личную информацию и историю проверок без вашего согласия.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- How It Works -->
+    <section class="how-it-works" id="how-it-works">
+        <div class="container">
+            <div class="section-title">
+                <h2>Как работает VacLive</h2>
+                <p>Всего 3 простых шага для проверки достоверности любой новости</p>
+            </div>
+            <div class="steps">
+                <div class="step">
+                    <div class="step-number">1</div>
+                    <h3>Установите расширение</h3>
+                    <p>Добавьте VacLive в ваш браузер за несколько кликов</p>
+                </div>
+                <div class="step">
+                    <div class="step-number">2</div>
+                    <h3>Выделите текст</h3>
+                    <p>Выделите новость или статью для проверки</p>
+                </div>
+                <div class="step">
+                    <div class="step-number">3</div>
+                    <h3>Получите анализ</h3>
+                    <p>AI проанализирует текст и предоставит детальный отчет</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Pricing Section -->
+    <section class="pricing" id="pricing">
+        <div class="container">
+            <div class="section-title">
+                <h2>Доступные тарифы</h2>
+                <p>Выберите подписку, которая подходит именно вам</p>
+            </div>
+            <div class="pricing-grid">
+                <div class="pricing-card">
+                    <h3>Бесплатный</h3>
+                    <div class="price">0₽<span class="price-period">/месяц</span></div>
+                    <ul class="pricing-features">
+                        <li>5 проверок в день</li>
+                        <li>Базовый анализ текста</li>
+                        <li>Ограниченный доступ к AI-помощнику</li>
+                        <li>История на 7 дней</li>
+                    </ul>
+                    <button class="btn btn-secondary" data-plan="free">Начать бесплатно</button>
+                </div>
+                <div class="pricing-card featured">
+                    <div class="pricing-badge">Популярный</div>
+                    <h3>Профессиональный</h3>
+                    <div class="price">299₽<span class="price-period">/месяц</span></div>
+                    <ul class="pricing-features">
+                        <li>Неограниченное количество проверок</li>
+                        <li>Расширенный анализ с проверкой источников</li>
+                        <li>Полный доступ к AI-помощнику</li>
+                        <li>История на 90 дней</li>
+                        <li>Приоритетная поддержка</li>
+                        <li>Экспорт результатов</li>
+                    </ul>
+                    <button class="btn btn-primary" data-plan="pro">Выбрать тариф</button>
+                </div>
+                <div class="pricing-card">
+                    <h3>Премиум</h3>
+                    <div class="price">599₽<span class="price-period">/месяц</span></div>
+                    <ul class="pricing-features">
+                        <li>Все возможности Профессионального тарифа</li>
+                        <li>API доступ для разработчиков</li>
+                        <li>Неограниченная история</li>
+                        <li>Расширенная аналитика</li>
+                        <li>Персональный менеджер</li>
+                        <li>Ранний доступ к новым функциям</li>
+                    </ul>
+                    <button class="btn btn-secondary" data-plan="premium">Выбрать тариф</button>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- FAQ Section -->
+    <section class="faq" id="faq">
+        <div class="container">
+            <div class="section-title">
+                <h2>Часто задаваемые вопросы</h2>
+                <p>Ответы на самые популярные вопросы о VacLive</p>
+            </div>
+            <div class="faq-grid">
+                <div class="faq-item">
+                    <div class="faq-question">
+                        <span>Как установить расширение?</span>
+                        <span>+</span>
+                    </div>
+                    <div class="faq-answer">
+                        <p>После регистрации и выбора тарифа вы получите ссылку для установки расширения. Просто перейдите по ней и добавьте VacLive в ваш браузер.</p>
+                    </div>
+                </div>
+                <div class="faq-item">
+                    <div class="faq-question">
+                        <span>На каких браузерах работает VacLive?</span>
+                        <span>+</span>
+                    </div>
+                    <div class="faq-answer">
+                        <p>VacLive работает на всех современных браузерах, включая Chrome, Firefox, Edge и Safari.</p>
+                    </div>
+                </div>
+                <div class="faq-item">
+                    <div class="faq-question">
+                        <span>Как происходит оплата?</span>
+                        <span>+</span>
+                    </div>
+                    <div class="faq-answer">
+                        <p>Мы принимаем все основные кредитные карты, электронные кошельки и банковские переводы. Оплата происходит безопасно через защищенное соединение.</p>
+                    </div>
+                </div>
+                <div class="faq-item">
+                    <div class="faq-question">
+                        <span>Можно ли отменить подписку?</span>
+                        <span>+</span>
+                    </div>
+                    <div class="faq-answer">
+                        <p>Да, вы можете отменить подписку в любой момент в личном кабинете. После отмены у вас останется доступ к услугам до конца оплаченного периода.</p>
+                    </div>
+                </div>
+                <div class="faq-item">
+                    <div class="faq-question">
+                        <span>Насколько точен анализ?</span>
+                        <span>+</span>
+                    </div>
+                    <div class="faq-answer">
+                        <p>Наш AI постоянно обучается и улучшается. Точность анализа составляет более 92% по независимым тестам. Однако мы рекомендуем использовать VacLive как инструмент поддержки принятия решений, а не как единственный источник истины.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer>
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-column">
+                    <h3>VacLive</h3>
+                    <p>Проверяйте достоверность новостей с помощью передовых технологий AI.</p>
+                </div>
+                <div class="footer-column">
+                    <h3>Продукт</h3>
+                    <ul>
+                        <li><a href="#features">Возможности</a></li>
+                        <li><a href="#how-it-works">Как работает</a></li>
+                        <li><a href="#pricing">Тарифы</a></li>
+                        <li><a href="#">Скачать</a></li>
+                    </ul>
+                </div>
+                <div class="footer-column">
+                    <h3>Поддержка</h3>
+                    <ul>
+                        <li><a href="#faq">FAQ</a></li>
+                        <li><a href="#">Документация</a></li>
+                        <li><a href="#">Связаться с нами</a></li>
+                        <li><a href="#">Сообщить о проблеме</a></li>
+                    </ul>
+                </div>
+                <div class="footer-column">
+                    <h3>Компания</h3>
+                    <ul>
+                        <li><a href="#">О нас</a></li>
+                        <li><a href="#">Блог</a></li>
+                        <li><a href="#">Партнеры</a></li>
+                        <li><a href="#">Вакансии</a></li>
+                    </ul>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>&copy; 2025 VacLive. Все права защищены.</p>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Modals -->
+    <div class="modal" id="loginModal">
+        <div class="modal-content">
+            <span class="close-modal">&times;</span>
+            <h2>Вход в аккаунт</h2>
+            <form id="loginForm">
+                <div class="form-group">
+                    <label for="loginEmail">Email</label>
+                    <input type="email" id="loginEmail" required>
+                </div>
+                <div class="form-group">
+                    <label for="loginPassword">Пароль</label>
+                    <input type="password" id="loginPassword" required>
+                </div>
+                <button type="submit" class="btn btn-primary" style="width: 100%;">Войти</button>
+            </form>
+            <p style="text-align: center; margin-top: 20px;">Нет аккаунта? <a href="#" id="showRegister">Зарегистрироваться</a></p>
+        </div>
+    </div>
+
+    <div class="modal" id="registerModal">
+        <div class="modal-content">
+            <span class="close-modal">&times;</span>
+            <h2>Регистрация</h2>
+            <form id="registerForm">
+                <div class="form-group">
+                    <label for="registerName">Имя</label>
+                    <input type="text" id="registerName" required>
+                </div>
+                <div class="form-group">
+                    <label for="registerEmail">Email</label>
+                    <input type="email" id="registerEmail" required>
+                </div>
+                <div class="form-group">
+                    <label for="registerPassword">Пароль</label>
+                    <input type="password" id="registerPassword" required>
+                </div>
+                <div class="form-group">
+                    <label for="registerPlan">Тарифный план</label>
+                    <select id="registerPlan">
+                        <option value="free">Бесплатный</option>
+                        <option value="pro">Профессиональный (299₽/месяц)</option>
+                        <option value="premium">Премиум (599₽/месяц)</option>
+                    </select>
+                </div>
+                <button type="submit" class="btn btn-primary" style="width: 100%;">Зарегистрироваться</button>
+            </form>
+            <p style="text-align: center; margin-top: 20px;">Уже есть аккаунт? <a href="#" id="showLogin">Войти</a></p>
+        </div>
+    </div>
+
+    <div class="modal" id="paymentModal">
+        <div class="modal-content">
+            <span class="close-modal">&times;</span>
+            <h2>Оформление подписки</h2>
+            <form id="paymentForm">
+                <div class="form-group">
+                    <label for="cardNumber">Номер карты</label>
+                    <input type="text" id="cardNumber" placeholder="1234 5678 9012 3456" required>
+                </div>
+                <div class="form-group" style="display: flex; gap: 15px;">
+                    <div style="flex: 1;">
+                        <label for="cardExpiry">Срок действия</label>
+                        <input type="text" id="cardExpiry" placeholder="ММ/ГГ" required>
+                    </div>
+                    <div style="flex: 1;">
+                        <label for="cardCVC">CVC</label>
+                        <input type="text" id="cardCVC" placeholder="123" required>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="cardName">Имя на карте</label>
+                    <input type="text" id="cardName" required>
+                </div>
+                <button type="submit" class="btn btn-primary" style="width: 100%;">Оплатить <span id="paymentAmount">299₽</span>/месяц</button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // Theme Toggle
+        document.getElementById('themeToggle').addEventListener('click', function() {
+            const currentTheme = document.body.getAttribute('data-theme');
+            const newTheme = currentTheme === 'light' ? 'dark' : 'light';
+            document.body.setAttribute('data-theme', newTheme);
+            
+            const themeIcon = document.getElementById('themeIcon');
+            const themeText = document.getElementById('themeText');
+            
+            if (newTheme === 'dark') {
+                themeIcon.textContent = '☀️';
+                themeText.textContent = 'Светлая тема';
+            } else {
+                themeIcon.textContent = '🌙';
+                themeText.textContent = 'Тёмная тема';
+            }
+            
+            // Save theme preference
+            localStorage.setItem('theme', newTheme);
+        });
+
+        // Load saved theme
+        const savedTheme = localStorage.getItem('theme') || 'light';
+        document.body.setAttribute('data-theme', savedTheme);
+        const themeIcon = document.getElementById('themeIcon');
+        const themeText = document.getElementById('themeText');
+        
+        if (savedTheme === 'dark') {
+            themeIcon.textContent = '☀️';
+            themeText.textContent = 'Светлая тема';
+        } else {
+            themeIcon.textContent = '🌙';
+            themeText.textContent = 'Тёмная тема';
+        }
+
+        // Modal functionality
+        const loginModal = document.getElementById('loginModal');
+        const registerModal = document.getElementById('registerModal');
+        const paymentModal = document.getElementById('paymentModal');
+        const loginBtn = document.getElementById('loginBtn');
+        const getStartedBtn = document.getElementById('getStartedBtn');
+        const showRegister = document.getElementById('showRegister');
+        const showLogin = document.getElementById('showLogin');
+        const closeButtons = document.querySelectorAll('.close-modal');
+        const pricingButtons = document.querySelectorAll('.pricing-card button');
+
+        // Open modals
+        loginBtn.addEventListener('click', () => loginModal.style.display = 'flex');
+        getStartedBtn.addEventListener('click', () => registerModal.style.display = 'flex');
+        showRegister.addEventListener('click', (e) => {
+            e.preventDefault();
+            loginModal.style.display = 'none';
+            registerModal.style.display = 'flex';
+        });
+        showLogin.addEventListener('click', (e) => {
+            e.preventDefault();
+            registerModal.style.display = 'none';
+            loginModal.style.display = 'flex';
+        });
+
+        // Close modals
+        closeButtons.forEach(button => {
+            button.addEventListener('click', () => {
+                loginModal.style.display = 'none';
+                registerModal.style.display = 'none';
+                paymentModal.style.display = 'none';
+            });
+        });
+
+        // Close modal when clicking outside
+        window.addEventListener('click', (e) => {
+            if (e.target === loginModal) loginModal.style.display = 'none';
+            if (e.target === registerModal) registerModal.style.display = 'none';
+            if (e.target === paymentModal) paymentModal.style.display = 'none';
+        });
+
+        // Pricing buttons
+        pricingButtons.forEach(button => {
+            button.addEventListener('click', function() {
+                const plan = this.getAttribute('data-plan');
+                
+                if (plan === 'free') {
+                    registerModal.style.display = 'flex';
+                    document.getElementById('registerPlan').value = 'free';
+                } else {
+                    // For paid plans, show payment modal
+                    paymentModal.style.display = 'flex';
+                    const amount = plan === 'pro' ? '299' : '599';
+                    document.getElementById('paymentAmount').textContent = amount + '₽';
+                    
+                    // Store selected plan for registration
+                    document.getElementById('registerPlan').value = plan;
+                }
+            });
+        });
+
+        // Form submissions
+        document.getElementById('loginForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            alert('Вход выполнен успешно!');
+            loginModal.style.display = 'none';
+        });
+
+        document.getElementById('registerForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const plan = document.getElementById('registerPlan').value;
+            
+            if (plan === 'free') {
+                alert('Регистрация завершена! На ваш email отправлена ссылка для установки расширения.');
+                registerModal.style.display = 'none';
+            } else {
+                registerModal.style.display = 'none';
+                paymentModal.style.display = 'flex';
+            }
+        });
+
+        document.getElementById('paymentForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            alert('Оплата прошла успешно! На ваш email отправлена ссылка для установки расширения.');
+            paymentModal.style.display = 'none';
+        });
+
+        // FAQ functionality
+        const faqItems = document.querySelectorAll('.faq-item');
+        faqItems.forEach(item => {
+            const question = item.querySelector('.faq-question');
+            question.addEventListener('click', () => {
+                item.classList.toggle('active');
+            });
+        });
+
+        // Smooth scrolling for anchor links
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                
+                const targetId = this.getAttribute('href');
+                if (targetId === '#') return;
+                
+                const targetElement = document.querySelector(targetId);
+                if (targetElement) {
+                    window.scrollTo({
+                        top: targetElement.offsetTop - 100,
+                        behavior: 'smooth'
+                    });
+                }
+            });
+        });
+    </script>
+</body>
+</html>

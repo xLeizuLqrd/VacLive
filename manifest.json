@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "VacLive",
-  "version": "1.9.6.2",
+  "version": "2.7",
   "description": "Info Relevance Checker - Автономный анализ",
   
   "icons": {
@@ -24,9 +24,7 @@
   ],
   
   "host_permissions": [
-    "https://api.deepseek.com/*",
-    "https://*/*",
-    "http://*/*"
+    "https://api.deepseek.com/*"
   ],
   
   "background": {
@@ -34,7 +32,7 @@
   },
   
   "web_accessible_resources": [{
-    "resources": ["pictures/icon48.png"],
+    "resources": ["pictures/icon48.png", "admin.html"],
     "matches": ["<all_urls>"]
   }]
 }
